@@ -1,0 +1,1904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>THE LAST MEAL</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+  body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+  canvas { display: block; cursor: default; }
+
+  /* --- Shared overlay styles --- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 100;
+    background: #000;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    color: #888; text-align: center;
+    transition: opacity 0.8s;
+  }
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+  .overlay h1 { font-size: 2.8rem; color: #c00; letter-spacing: 4px; margin-bottom: 10px; text-shadow: 0 0 40px #c008; }
+  .overlay .sub { color: #555; font-size: 0.9rem; margin-bottom: 30px; max-width: 400px; }
+  .overlay .start-btn {
+    padding: 14px 48px; font-size: 1.2rem;
+    background: #300; color: #c44; border: 1px solid #600;
+    cursor: pointer; letter-spacing: 3px; transition: 0.3s;
+    margin-top: 20px;
+  }
+  .overlay .start-btn:hover { background: #500; color: #f66; border-color: #a00; box-shadow: 0 0 40px #c004; }
+  .overlay .controls { margin-top: 30px; color: #444; font-size: 0.85rem; line-height: 1.8; }
+
+  /* --- Difficulty Selection --- */
+  #difficulty-screen { z-index: 101; }
+  #difficulty-screen h2 {
+    color: #777; font-size: 0.85rem; letter-spacing: 4px; margin-bottom: 40px;
+    font-weight: 400; text-transform: uppercase;
+  }
+  #difficulty-screen .diff-container {
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+  }
+  .diff-option {
+    display: block; width: 400px; padding: 18px 28px;
+    background: #0d0d10; color: #888; border: 1px solid #222;
+    cursor: pointer; font-size: 1rem; letter-spacing: 0;
+    transition: all 0.25s ease; text-align: left;
+    position: relative;
+  }
+  .diff-option:hover {
+    background: #14141a; border-color: #444;
+  }
+  .diff-option .diff-title {
+    color: #bbb; font-size: 0.95rem; letter-spacing: 2px;
+    display: block; margin-bottom: 6px;
+  }
+  .diff-option .diff-desc {
+    font-size: 0.72rem; color: #555; line-height: 1.6; letter-spacing: 0.5px;
+    display: block; padding-right: 70px;
+  }
+  .diff-option .diff-tag {
+    position: absolute; right: 24px; top: 50%; transform: translateY(-50%);
+    font-size: 0.65rem; padding: 3px 14px; border: 1px solid;
+    letter-spacing: 3px; font-weight: 500;
+  }
+  .diff-option .diff-tag.easy-tag { color: #4a8; border-color: #4a8; }
+  .diff-option .diff-tag.normal-tag { color: #aa8; border-color: #aa8; }
+  .diff-option .diff-tag.hard-tag { color: #c44; border-color: #c44; }
+  .diff-option.selected {
+    border-color: #864; background: #120a08;
+    box-shadow: 0 0 30px rgba(136, 64, 32, 0.08);
+  }
+  .diff-option.selected .diff-title { color: #e76; }
+  .diff-option.selected .diff-desc { color: #887; }
+
+  /* --- Cutscene --- */
+  #cutscene {
+    position: fixed; inset: 0; z-index: 102;
+    background: #000;
+    display: none;
+    flex-direction: column;
+    justify-content: center; align-items: center;
+    color: #888; text-align: center;
+  }
+  #cutscene.show { display: flex; }
+
+  #cutscene-text {
+    font-size: 1.3rem;
+    color: #aaa;
+    max-width: 600px;
+    line-height: 1.8;
+    letter-spacing: 2px;
+    opacity: 0;
+    transition: opacity 0.8s;
+    padding: 0 40px;
+    text-shadow: 0 0 30px #000;
+  }
+  #cutscene-text.show { opacity: 1; }
+  #cutscene-text.blood { color: #a44; }
+  #cutscene-text.strong { color: #ccc; font-size: 1.5rem; }
+
+  #cutscene-sub {
+    font-size: 0.75rem;
+    color: #444;
+    margin-top: 15px;
+    letter-spacing: 4px;
+    opacity: 0;
+    transition: opacity 1s;
+  }
+  #cutscene-sub.show { opacity: 1; }
+
+  /* Cutscene blood splatter overlay */
+  #cutscene-blood {
+    position: fixed; inset: 0; z-index: 101;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 1.5s;
+    background:
+      radial-gradient(ellipse 30% 20% at 20% 30%, rgba(80,0,0,0.6) 0%, transparent 70%),
+      radial-gradient(ellipse 15% 40% at 85% 50%, rgba(100,0,0,0.4) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 10% at 50% 80%, rgba(60,0,0,0.3) 0%, transparent 70%);
+  }
+  #cutscene-blood.show { opacity: 1; }
+
+  /* Cutscene flicker overlay */
+  #cutscene-flicker {
+    position: fixed; inset: 0; z-index: 103;
+    pointer-events: none;
+    background: #000;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+
+  #cutscene-skip {
+    position: fixed; bottom: 40px; right: 40px;
+    z-index: 104;
+    color: #333;
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.5s;
+    border: none;
+    background: none;
+  }
+  #cutscene-skip.show { opacity: 1; }
+  #cutscene-skip:hover { color: #666; }
+
+  /* --- HUD --- */
+  #hud {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+    z-index: 10; pointer-events: none;
+    display: flex; gap: 40px; align-items: center;
+    font-size: 0.8rem; color: #888; letter-spacing: 1px;
+  }
+  #hud .stat { display: flex; align-items: center; gap: 8px; }
+  #hud .bar-bg { width: 120px; height: 4px; background: #222; border-radius: 2px; overflow: hidden; }
+  #hud .bar-fill { height: 100%; width: 100%; border-radius: 2px; transition: width 0.3s; }
+  #panic-fill { background: #b44; }
+  #health-fill { background: #4a4; }
+
+  #difficulty-tag {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    z-index: 10; pointer-events: none;
+    color: #333; font-size: 0.65rem; letter-spacing: 3px;
+    opacity: 0.5;
+  }
+
+  #flashlight-ui {
+    position: fixed; inset: 0; z-index: 5;
+    pointer-events: none;
+    background: radial-gradient(ellipse 65% 60% at 50% 55%, transparent 25%, rgba(0,0,0,0.4) 55%, #000 100%);
+    transition: opacity 0.3s;
+  }
+
+  #vignette {
+    position: fixed; inset: 0; z-index: 6;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.85) 100%);
+  }
+
+  #blood-overlay {
+    position: fixed; inset: 0; z-index: 15;
+    pointer-events: none; opacity: 0;
+    background: radial-gradient(ellipse at 50% 60%, transparent 40%, #800 100%);
+    transition: opacity 0.5s;
+  }
+  #blood-overlay.show { opacity: 0.5; }
+
+  #jumpscare {
+    position: fixed; inset: 0; z-index: 200;
+    display: none; justify-content: center; align-items: center;
+    background: #000; pointer-events: none;
+  }
+  #jumpscare.show { display: flex; }
+  #jumpscare .face {
+    font-size: 20rem; line-height: 1;
+    filter: blur(3px) brightness(0.3);
+    animation: scarePulse 0.15s ease-out;
+  }
+  @keyframes scarePulse {
+    0% { transform: scale(3); filter: blur(6px) brightness(1); }
+    100% { transform: scale(1); filter: blur(3px) brightness(0.3); }
+  }
+
+  #subtitle {
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+    z-index: 20; pointer-events: none;
+    color: #aaa; font-size: 1rem; letter-spacing: 2px;
+    opacity: 0; transition: opacity 0.5s;
+    text-shadow: 0 0 20px #000;
+    text-align: center; max-width: 500px;
+  }
+  #subtitle.show { opacity: 1; }
+
+  #interact-hint {
+    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+    z-index: 15; pointer-events: none;
+    color: #ccc; font-size: 0.85rem; letter-spacing: 2px;
+    opacity: 0; transition: opacity 0.3s;
+  }
+  #interact-hint.show { opacity: 1; }
+
+  #items-hud {
+    position: fixed; bottom: 70px; right: 30px;
+    z-index: 10; pointer-events: none;
+    display: flex; gap: 8px; flex-direction: column;
+    align-items: flex-end;
+  }
+  #items-hud .item {
+    background: rgba(0,0,0,0.6);
+    border: 1px solid #333;
+    padding: 4px 12px;
+    color: #888;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+  }
+
+  #flashlight-btn {
+    position: fixed; bottom: 80px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 12;
+    background: rgba(20,20,25,0.85);
+    border: 1px solid #444;
+    color: #aaa;
+    padding: 8px 20px;
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.2s;
+    backdrop-filter: blur(4px);
+  }
+  #flashlight-btn:hover { border-color: #888; color: #ddd; background: rgba(30,30,35,0.9); }
+  #flashlight-btn.off { color: #555; border-color: #222; }
+  #flashlight-btn.off:hover { border-color: #555; color: #888; }
+
+  /* --- Crosshair (always visible during gameplay) --- */
+  #crosshair {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    z-index: 8; pointer-events: none;
+    width: 24px; height: 24px;
+    opacity: 0.5;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ''; position: absolute;
+    background: #bbb;
+  }
+  #crosshair::before { width: 1px; height: 100%; left: 50%; transform: translateX(-50%); }
+  #crosshair::after  { width: 100%; height: 1px; top: 50%; transform: translateY(-50%); }
+  #crosshair .dot {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 3px; height: 3px; border-radius: 50%;
+    background: #ddd;
+  }
+
+  /* --- Game action buttons (top-right) --- */
+  #action-btns {
+    position: fixed; top: 16px; right: 16px; z-index: 12;
+    display: flex; gap: 8px;
+  }
+  .action-btn {
+    background: rgba(16,16,20,0.8); border: 1px solid #333;
+    color: #777; padding: 6px 14px; font-size: 0.7rem;
+    letter-spacing: 1px; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .action-btn:hover { border-color: #666; color: #bbb; background: rgba(26,26,32,0.9); }
+  .action-btn.locked { opacity: 0.3; pointer-events: none; }
+
+  /* --- Pause overlay --- */
+  #pause-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,0.85);
+    display: none; flex-direction: column;
+    justify-content: center; align-items: center;
+    backdrop-filter: blur(6px);
+  }
+  #pause-overlay.show { display: flex; }
+  #pause-overlay h2 { color: #888; font-size: 1.2rem; letter-spacing: 4px; margin-bottom: 30px; }
+  .pause-btn {
+    background: #111; border: 1px solid #333; color: #888;
+    padding: 10px 36px; margin: 6px; font-size: 0.85rem;
+    letter-spacing: 2px; cursor: pointer; transition: 0.2s;
+    min-width: 200px;
+  }
+  .pause-btn:hover { border-color: #666; color: #ccc; background: #1a1a22; }
+
+  /* --- Map overlay --- */
+  #map-overlay {
+    position: fixed; inset: 0; z-index: 210;
+    background: rgba(0,0,0,0.9);
+    display: none; flex-direction: column;
+    justify-content: center; align-items: center;
+  }
+  #map-overlay.show { display: flex; }
+  #map-overlay h3 { color: #666; font-size: 0.8rem; letter-spacing: 3px; margin-bottom: 20px; }
+  #map-canvas {
+    border: 1px solid #333; background: #0a0a0e;
+  }
+  #map-overlay .close-btn {
+    margin-top: 20px; background: #111; border: 1px solid #333;
+    color: #777; padding: 8px 24px; cursor: pointer; letter-spacing: 2px;
+    font-size: 0.75rem;
+  }
+  #map-overlay .close-btn:hover { border-color: #666; color: #bbb; }
+
+  /* --- Inventory overlay --- */
+  #inv-overlay {
+    position: fixed; inset: 0; z-index: 210;
+    background: rgba(0,0,0,0.9);
+    display: none; flex-direction: column;
+    justify-content: center; align-items: center;
+  }
+  #inv-overlay.show { display: flex; }
+  #inv-overlay h3 { color: #666; font-size: 0.8rem; letter-spacing: 3px; margin-bottom: 20px; }
+  #inv-grid {
+    display: flex; gap: 12px; flex-wrap: wrap;
+    justify-content: center; max-width: 400px;
+  }
+  .inv-slot {
+    width: 80px; height: 80px;
+    background: #0d0d12; border: 1px solid #222;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    gap: 4px;
+  }
+  .inv-slot .icon { font-size: 1.4rem; }
+  .inv-slot .label { font-size: 0.6rem; color: #555; letter-spacing: 1px; }
+  .inv-slot.filled { border-color: #443; }
+  #inv-overlay .close-btn {
+    margin-top: 24px; background: #111; border: 1px solid #333;
+    color: #777; padding: 8px 24px; cursor: pointer; letter-spacing: 2px;
+    font-size: 0.75rem;
+  }
+  #inv-overlay .close-btn:hover { border-color: #666; color: #bbb; }
+</style>
+</head>
+<body>
+
+<!-- ===== TITLE SCREEN ===== -->
+<div class="overlay" id="title-screen">
+  <h1>THE LAST MEAL</h1>
+  <div class="sub">You just wanted a late dinner. Now you're the main course.</div>
+  <button class="start-btn" id="start-btn">ENTER THE RESTAURANT</button>
+  <div class="controls">WASD &mdash; Move &nbsp;|&nbsp; Mouse &mdash; Look &nbsp;|&nbsp; E &mdash; Interact</div>
+</div>
+
+<!-- ===== DIFFICULTY SELECTION ===== -->
+<div class="overlay hidden" id="difficulty-screen">
+  <h2>Choose Your Experience</h2>
+  <div class="diff-container">
+    <button class="diff-option" data-diff="easy" id="diff-easy">
+      <span class="diff-title">Easy — Veteran Cop</span>
+      <span class="diff-desc">Six years on the force. You've seen worse. Enemies deal less damage, you're harder to catch.</span>
+      <span class="diff-tag easy-tag">EASY</span>
+    </button>
+    <button class="diff-option" data-diff="normal" id="diff-normal">
+      <span class="diff-title">Normal — Cop on Duty</span>
+      <span class="diff-desc">Almost a year in. You know the streets. Balanced experience.</span>
+      <span class="diff-tag normal-tag">NORMAL</span>
+    </button>
+    <button class="diff-option" data-diff="hard" id="diff-hard">
+      <span class="diff-title">Hard — First Day</span>
+      <span class="diff-desc">Graduated this morning. Everything is faster, hits harder, and you panic easier.</span>
+      <span class="diff-tag hard-tag">HARD</span>
+    </button>
+  </div>
+</div>
+
+<!-- ===== CUTSCENE ===== -->
+<div id="cutscene-blood"></div>
+<div id="cutscene">
+  <div id="cutscene-text"></div>
+  <div id="cutscene-sub"></div>
+</div>
+<div id="cutscene-flicker"></div>
+<button id="cutscene-skip">SKIP &gt;&gt;</button>
+
+<!-- ===== IN-GAME UI ===== -->
+<div id="flashlight-ui"></div>
+<div id="vignette"></div>
+<div id="blood-overlay"></div>
+<div id="jumpscare"><div class="face">&#128128;</div></div>
+<div id="subtitle"></div>
+<div id="interact-hint"></div>
+<div id="difficulty-tag"></div>
+
+<div id="hud">
+  <div class="stat">
+    <span>HEALTH</span>
+    <div class="bar-bg"><div class="bar-fill" id="health-fill"></div></div>
+    <span id="health-pct">100</span>
+  </div>
+  <div class="stat">
+    <span>PANIC</span>
+    <div class="bar-bg"><div class="bar-fill" id="panic-fill"></div></div>
+    <span id="panic-pct">0</span>
+  </div>
+</div>
+
+<button id="flashlight-btn">🔦 ON</button>
+
+<div id="items-hud"></div>
+
+<!-- Crosshair -->
+<div id="crosshair"><div class="dot"></div></div>
+
+<!-- Action buttons -->
+<div id="action-btns">
+  <button class="action-btn" id="btn-pause">II PAUSE</button>
+  <button class="action-btn locked" id="btn-map">MAP</button>
+  <button class="action-btn" id="btn-inv">INV</button>
+</div>
+
+<!-- Pause overlay -->
+<div id="pause-overlay">
+  <h2>PAUSED</h2>
+  <button class="pause-btn" id="btn-resume">RESUME</button>
+  <button class="pause-btn" id="btn-quit">QUIT TO TITLE</button>
+</div>
+
+<!-- Map overlay -->
+<div id="map-overlay">
+  <h3>RESTAURANT MAP</h3>
+  <canvas id="map-canvas" width="300" height="240"></canvas>
+  <button class="close-btn" id="btn-close-map">CLOSE</button>
+</div>
+
+<!-- Inventory overlay -->
+<div id="inv-overlay">
+  <h3>INVENTORY</h3>
+  <div id="inv-grid"></div>
+  <button class="close-btn" id="btn-close-inv">CLOSE</button>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// --- DOM ---
+const titleScreen = document.getElementById('title-screen');
+const diffScreen = document.getElementById('difficulty-screen');
+const startBtn = document.getElementById('start-btn');
+const diffBtns = document.querySelectorAll('.diff-option');
+const cutsceneEl = document.getElementById('cutscene');
+const cutsceneText = document.getElementById('cutscene-text');
+const cutsceneSub = document.getElementById('cutscene-sub');
+const cutsceneBlood = document.getElementById('cutscene-blood');
+const cutsceneFlicker = document.getElementById('cutscene-flicker');
+const cutsceneSkip = document.getElementById('cutscene-skip');
+const healthFill = document.getElementById('health-fill');
+const healthPct = document.getElementById('health-pct');
+const panicFill = document.getElementById('panic-fill');
+const panicPct = document.getElementById('panic-pct');
+const flashlightUI = document.getElementById('flashlight-ui');
+const bloodOverlay = document.getElementById('blood-overlay');
+const jumpscareEl = document.getElementById('jumpscare');
+const subtitleEl = document.getElementById('subtitle');
+const interactHint = document.getElementById('interact-hint');
+const itemsHud = document.getElementById('items-hud');
+const difficultyTag = document.getElementById('difficulty-tag');
+
+// --- Difficulty settings ---
+let difficulty = 'normal';
+const DIFF = {
+  easy:   { label: 'EASY — Veteran Cop',   hpMpl: 1.4, zombieDmg: 7,  zombieSpeed: 0.5, panicDrainMul: 0.6, aggroRange: 5 },
+  normal: { label: 'NORMAL — Cop on Duty', hpMpl: 1.0, zombieDmg: 12, zombieSpeed: 0.7, panicDrainMul: 1.0, aggroRange: 6 },
+  hard:   { label: 'HARD — First Day',     hpMpl: 0.6, zombieDmg: 18, zombieSpeed: 0.9, panicDrainMul: 1.5, aggroRange: 7 },
+};
+
+// --- Scene ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x030308);
+scene.fog = new THREE.FogExp2(0x030308, 0.035);
+
+const camera = new THREE.PerspectiveCamera(88, window.innerWidth / window.innerHeight, 0.1, 60);
+camera.position.set(0, 1.65, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.5;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.prepend(renderer.domElement);
+
+// --- Audio ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let masterGain = audioCtx.createGain();
+masterGain.gain.value = 0.25;
+masterGain.connect(audioCtx.destination);
+
+function noiseBuffer(duration, type='brown') {
+  const sr = audioCtx.sampleRate;
+  const len = sr * duration;
+  const buf = audioCtx.createBuffer(1, len, sr);
+  const data = buf.getChannelData(0);
+  let val = 0;
+  for (let i = 0; i < len; i++) {
+    const white = Math.random() * 2 - 1;
+    if (type === 'brown') { val = (val + 0.02 * white) / 1.02; data[i] = val * 3; }
+    else data[i] = white * 0.3;
+  }
+  return buf;
+}
+
+function playAmbient() {
+  const buf = noiseBuffer(4, 'brown');
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf; src.loop = true;
+  const lpf = audioCtx.createBiquadFilter();
+  lpf.type = 'lowpass'; lpf.frequency.value = 180;
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0.12;
+  src.connect(lpf).connect(gain).connect(masterGain);
+  src.start();
+}
+
+function playBuzz() {
+  const buf = noiseBuffer(2, 'brown');
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf; src.loop = true;
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = 70; bp.Q.value = 8;
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0.04;
+  src.connect(bp).connect(gain).connect(masterGain);
+  src.start();
+}
+
+function playSound(type) {
+  const now = audioCtx.currentTime;
+  if (type === 'creak') {
+    const buf = noiseBuffer(0.7, 'brown');
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const bp = audioCtx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 350 + Math.random() * 200; bp.Q.value = 5;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.06, now + 0.08);
+    gain.gain.linearRampToValueAtTime(0.02, now + 0.4);
+    gain.gain.linearRampToValueAtTime(0, now + 0.7);
+    src.connect(bp).connect(gain).connect(masterGain);
+    src.start(now);
+  } else if (type === 'groan') {
+    const buf = noiseBuffer(1.5, 'brown');
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const lpf = audioCtx.createBiquadFilter();
+    lpf.type = 'lowpass'; lpf.frequency.setValueAtTime(800, now);
+    lpf.frequency.exponentialRampToValueAtTime(150, now + 1.2);
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.05, now + 0.15);
+    gain.gain.linearRampToValueAtTime(0.02, now + 0.8);
+    gain.gain.linearRampToValueAtTime(0, now + 1.5);
+    src.connect(lpf).connect(gain).connect(masterGain);
+    src.start(now);
+  } else if (type === 'scream') {
+    const buf = noiseBuffer(1.0, 'white');
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const bp = audioCtx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.setValueAtTime(600, now);
+    bp.frequency.exponentialRampToValueAtTime(2500, now + 0.8);
+    bp.Q.value = 3;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.18, now + 0.12);
+    gain.gain.linearRampToValueAtTime(0.08, now + 0.5);
+    gain.gain.linearRampToValueAtTime(0, now + 1.0);
+    src.connect(bp).connect(gain).connect(masterGain);
+    src.start(now);
+  } else if (type === 'chatter') {
+    const buf = noiseBuffer(0.3, 'brown');
+    const src = audioCtx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const bp = audioCtx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 200 + Math.random() * 300; bp.Q.value = 3;
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.02, now + 0.1);
+    gain.gain.linearRampToValueAtTime(0.01, now + 1.0);
+    gain.gain.linearRampToValueAtTime(0, now + 2.0);
+    src.connect(bp).connect(gain).connect(masterGain);
+    src.start(now);
+    src.stop(now + 2.5);
+  } else if (type === 'heartbeat') {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine'; osc.frequency.value = 40;
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0;
+    for (let i = 0; i < 4; i++) {
+      const t = now + i * 0.8;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.15, t + 0.04);
+      gain.gain.linearRampToValueAtTime(0, t + 0.12);
+      gain.gain.setValueAtTime(0.18, t + 0.3);
+      gain.gain.linearRampToValueAtTime(0, t + 0.38);
+    }
+    osc.connect(gain).connect(masterGain);
+    osc.start(now); osc.stop(now + 4);
+  } else if (type === 'glass') {
+    const buf = noiseBuffer(0.4, 'white');
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const bp = audioCtx.createBiquadFilter();
+    bp.type = 'highpass'; bp.frequency.value = 3000;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.12, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    src.connect(bp).connect(gain).connect(masterGain);
+    src.start(now);
+  } else if (type === 'thud') {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine'; osc.frequency.setValueAtTime(80, now);
+    osc.frequency.exponentialRampToValueAtTime(20, now + 0.3);
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.2, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    osc.connect(gain).connect(masterGain);
+    osc.start(now); osc.stop(now + 0.4);
+  } else if (type === 'wind') {
+    const buf = noiseBuffer(2, 'brown');
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const lpf = audioCtx.createBiquadFilter();
+    lpf.type = 'lowpass'; lpf.frequency.value = 120;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.08, now + 0.5);
+    gain.gain.linearRampToValueAtTime(0.04, now + 1.0);
+    gain.gain.linearRampToValueAtTime(0, now + 2.0);
+    src.connect(lpf).connect(gain).connect(masterGain);
+    src.start(now); src.stop(now + 2.5);
+  }
+}
+
+// =====================================================================
+//   CUTSCENE SYSTEM
+// =====================================================================
+const cutsceneScenes = [
+  // Scene 0 — establish cop
+  { text: "Chicago Police Department\nPrecinct 7", sub: "11:47 PM", delay: 2.5, sound: null },
+  // Scene 1
+  { text: "Officer Daniel Cruz's shift is finally over.", sub: "", delay: 3.0, sound: null },
+  // Scene 2
+  { text: "He decides to grab a late dinner\nat his favorite spot...", sub: "", delay: 3.5, sound: null },
+  // Scene 3
+  { text: "...Maria's Diner on 3rd Street.", sub: "Just a few blocks away", delay: 2.5, sound: null },
+  // Scene 4 — transition
+  { text: "But when he arrives...", sub: "", delay: 2.0, sound: null, cls: 'strong' },
+  // Scene 5 — dark
+  { text: "The lights are out.", sub: "", delay: 2.5, sound: null },
+  // Scene 6 — reveal
+  { text: "The windows are smashed.", sub: "", delay: 2.5, sound: 'glass', cls: 'blood' },
+  // Scene 7
+  { text: "There's blood smeared across the walls.", sub: "", delay: 3.0, sound: null, cls: 'blood', blood: true },
+  // Scene 8
+  { text: "The front door hangs open...\ncreaking in the wind.", sub: "", delay: 3.5, sound: 'creak', blood: true },
+  // Scene 9 — wind
+  { text: "He draws his service weapon\nand steps inside.", sub: "", delay: 2.5, sound: 'wind', cls: 'strong' },
+  // Scene 10 — final fade
+  { text: "...", sub: "Something moved in the dark.", delay: 2.0, sound: 'thud' },
+];
+
+let cutsceneIndex = 0;
+let cutsceneRunning = false;
+let cutsceneTimer = null;
+
+function startCutscene() {
+  cutsceneRunning = true;
+  cutsceneEl.classList.add('show');
+  cutsceneSkip.classList.add('show');
+  document.getElementById('difficulty-tag').textContent = DIFF[difficulty].label;
+  difficultyTag.style.opacity = '1';
+  playCutsceneScene(0);
+}
+
+function playCutsceneScene(index) {
+  if (index >= cutsceneScenes.length) {
+    endCutscene();
+    return;
+  }
+  cutsceneIndex = index;
+  const sceneData = cutsceneScenes[index];
+
+  // Reset
+  cutsceneText.className = '';
+  cutsceneText.classList.remove('show', 'blood', 'strong');
+  cutsceneSub.classList.remove('show');
+  cutsceneBlood.classList.remove('show');
+
+  // Show text after tiny delay
+  setTimeout(() => {
+    cutsceneText.textContent = sceneData.text;
+    cutsceneText.classList.add('show');
+    if (sceneData.cls) cutsceneText.classList.add(sceneData.cls);
+
+    if (sceneData.sub) {
+      cutsceneSub.textContent = sceneData.sub;
+      setTimeout(() => cutsceneSub.classList.add('show'), 300);
+    }
+
+    if (sceneData.sound) playSound(sceneData.sound);
+
+    if (sceneData.blood) {
+      // Flicker before blood reveal
+      cutsceneFlicker.style.opacity = '0.6';
+      setTimeout(() => {
+        cutsceneFlicker.style.opacity = '0';
+        cutsceneBlood.classList.add('show');
+      }, 150);
+    }
+
+    // Flash flicker for smash/scare
+    if (sceneData.sound === 'glass' || sceneData.sound === 'thud') {
+      cutsceneFlicker.style.opacity = '0.8';
+      setTimeout(() => cutsceneFlicker.style.opacity = '0', 80);
+      if (sceneData.sound === 'thud') {
+        setTimeout(() => {
+          cutsceneFlicker.style.opacity = '0.5';
+          setTimeout(() => cutsceneFlicker.style.opacity = '0', 60);
+        }, 200);
+      }
+    }
+  }, 100);
+
+  // Schedule next scene
+  if (cutsceneTimer) clearTimeout(cutsceneTimer);
+  const holdTime = sceneData.delay + 1.0;
+  cutsceneTimer = setTimeout(() => {
+    // Fade out
+    cutsceneText.classList.remove('show');
+    cutsceneSub.classList.remove('show');
+    setTimeout(() => {
+      playCutsceneScene(index + 1);
+    }, 700);
+  }, holdTime * 1000);
+}
+
+function endCutscene() {
+  cutsceneRunning = false;
+  cutsceneEl.classList.remove('show');
+  cutsceneSkip.classList.remove('show');
+  cutsceneBlood.classList.remove('show');
+  cutsceneText.textContent = '';
+  if (cutsceneTimer) clearTimeout(cutsceneTimer);
+
+  // Start game
+  locked = false;
+  showSubtitle("The restaurant is dark... click to look around, find the key and get out.", 5);
+  playAmbient();
+  playBuzz();
+  difficultyTag.style.opacity = '1';
+}
+
+// Skip cutscene
+cutsceneSkip.addEventListener('click', () => {
+  if (!cutsceneRunning) return;
+  cutsceneRunning = false;
+  cutsceneEl.classList.remove('show');
+  cutsceneSkip.classList.remove('show');
+  cutsceneBlood.classList.remove('show');
+  if (cutsceneTimer) clearTimeout(cutsceneTimer);
+  cutsceneText.textContent = '';
+
+  locked = false;
+  showSubtitle("The restaurant is dark... find the key and get out.", 4);
+  playAmbient();
+  playBuzz();
+  difficultyTag.style.opacity = '1';
+});
+
+// =====================================================================
+//   DIFFICULTY SELECTION
+// =====================================================================
+startBtn.addEventListener('click', () => {
+  titleScreen.classList.add('hidden');
+  diffScreen.classList.remove('hidden');
+});
+
+diffBtns.forEach(btn => {
+  btn.addEventListener('click', async () => {
+    await audioCtx.resume();
+    // Remove previous selection
+    diffBtns.forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    difficulty = btn.dataset.diff;
+
+    // Set difficulty params globally
+    window.DIFFICULTY = DIFF[difficulty];
+
+    // Transition to cutscene
+    diffScreen.classList.add('hidden');
+    setTimeout(() => startCutscene(), 400);
+  });
+});
+
+// =====================================================================
+//   RESTAURANT BUILDER
+// =====================================================================
+const REST_W = 28;
+const REST_D = 22;
+const WALL_H = 3.0;
+
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.95, metalness: 0 });
+const wallMatDark = new THREE.MeshStandardMaterial({ color: 0x12121a, roughness: 0.95, metalness: 0 });
+const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a1414, roughness: 1, metalness: 0 });
+const ceilMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0f, roughness: 1, metalness: 0 });
+
+const floorGeo = new THREE.PlaneGeometry(REST_W + 4, REST_D + 4);
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.position.set(REST_W / 2, 0.01, REST_D / 2);
+floor.receiveShadow = true;
+scene.add(floor);
+
+const ceil = new THREE.Mesh(floorGeo, ceilMat);
+ceil.rotation.x = Math.PI / 2;
+ceil.position.set(REST_W / 2, WALL_H - 0.05, REST_D / 2);
+scene.add(ceil);
+
+function addWall(x, z, w, h, d, ry) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  const mesh = new THREE.Mesh(geo, wallMatDark);
+  mesh.position.set(x, h / 2, z);
+  mesh.rotation.y = ry;
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+
+addWall(-1, REST_D / 2, 0.3, WALL_H, REST_D + 2, 0);
+addWall(REST_W + 1, REST_D / 2, 0.3, WALL_H, REST_D + 2, 0);
+addWall(REST_W / 2, -1, REST_W + 2, WALL_H, 0.3, 0);
+addWall(REST_W / 2, REST_D + 1, REST_W + 2, WALL_H, 0.3, 0);
+
+function addWallSegment(x1, z1, x2, z2) {
+  const dx = x2 - x1, dz = z2 - z1;
+  const len = Math.sqrt(dx*dx + dz*dz);
+  const angle = Math.atan2(dx, dz);
+  const geo = new THREE.BoxGeometry(0.2, WALL_H, len);
+  const mesh = new THREE.Mesh(geo, wallMat);
+  mesh.position.set((x1 + x2) / 2, WALL_H / 2, (z1 + z2) / 2);
+  mesh.rotation.y = angle;
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+
+addWallSegment(18, 2, 18, 12);
+const doorMat = new THREE.MeshStandardMaterial({ color: 0x221a10, roughness: 0.9 });
+const doorGeo = new THREE.BoxGeometry(0.2, 2.2, 1.2);
+const door1 = new THREE.Mesh(doorGeo, doorMat);
+door1.position.set(18, 1.3, 6.5);
+door1.castShadow = true;
+scene.add(door1);
+const frameMat = new THREE.MeshStandardMaterial({ color: 0x2a2218 });
+const frameGeo = new THREE.BoxGeometry(0.2, 0.1, 1.4);
+for (let dy of [0, 2.2]) {
+  const f = new THREE.Mesh(frameGeo.clone(), frameMat);
+  f.position.set(18, dy, 6.5);
+  scene.add(f);
+}
+addWallSegment(18, 12, 18, 16);
+addWallSegment(18, 16, 18, 20);
+addWallSegment(2, 16, 10, 16);
+addWallSegment(10, 16, 18, 16);
+
+const archMat = new THREE.MeshStandardMaterial({ color: 0x2a2218 });
+const archPillarGeo = new THREE.BoxGeometry(0.3, WALL_H, 0.3);
+for (let p of [{x:9.5, z:16}, {x:12.5, z:16}]) {
+  const pillar = new THREE.Mesh(archPillarGeo, archMat);
+  pillar.position.set(p.x, WALL_H / 2, p.z);
+  pillar.castShadow = true;
+  scene.add(pillar);
+}
+
+const exitDoorMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 0.8 });
+const exitDoor = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.4, 0.2), exitDoorMat);
+exitDoor.position.set(14, 1.35, REST_D + 1);
+exitDoor.castShadow = true;
+scene.add(exitDoor);
+const exitSignMat = new THREE.MeshStandardMaterial({ color: 0x220000, emissive: 0x440000, emissiveIntensity: 0.3 });
+const exitSign = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.3, 0.05), exitSignMat);
+exitSign.position.set(14, 2.6, REST_D + 1);
+scene.add(exitSign);
+
+// --- Lighting ---
+const ambLight = new THREE.AmbientLight(0x111122, 0.15);
+scene.add(ambLight);
+
+const ceilingLights = [];
+for (let i = 0; i < 12; i++) {
+  const x = 3 + Math.random() * 13;
+  const z = 3 + Math.random() * 12;
+  const light = new THREE.PointLight(0xff8844, 0.2 + Math.random() * 0.15, 4);
+  light.position.set(x, WALL_H - 0.3, z);
+  scene.add(light);
+  ceilingLights.push({ light, base: light.intensity, phase: Math.random() * 6, speed: 1 + Math.random() * 3 });
+}
+
+const kitchenLight = new THREE.PointLight(0x88bbff, 0.3, 5);
+kitchenLight.position.set(21, WALL_H - 0.3, 6);
+scene.add(kitchenLight);
+
+const flashlight = new THREE.SpotLight(0xffeedd, 80);
+flashlight.angle = 0.4;
+flashlight.penumbra = 0.7;
+flashlight.decay = 2;
+flashlight.distance = 18;
+flashlight.castShadow = true;
+flashlight.shadow.mapSize.width = 512;
+flashlight.shadow.mapSize.height = 512;
+camera.add(flashlight);
+camera.add(flashlight.target);
+scene.add(camera);
+
+const playerGlow = new THREE.PointLight(0x334466, 0.15, 4);
+camera.add(playerGlow);
+
+// --- Furniture ---
+const tableMat = new THREE.MeshStandardMaterial({ color: 0x2a2218, roughness: 0.9 });
+const tableTopMat = new THREE.MeshStandardMaterial({ color: 0x332a1e, roughness: 0.85 });
+const chairMat = new THREE.MeshStandardMaterial({ color: 0x1a1410, roughness: 0.9 });
+
+function createTable(x, z, round=false) {
+  const group = new THREE.Group();
+  if (round) {
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.06, 16), tableTopMat);
+    top.position.y = 0.9;
+    group.add(top);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 0.88, 6), tableMat);
+    leg.position.y = 0.44;
+    group.add(leg);
+  } else {
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.05, 0.6), tableTopMat);
+    top.position.y = 0.9;
+    group.add(top);
+    for (let dx of [-0.35, 0.35]) for (let dz of [-0.2, 0.2]) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.87, 4), tableMat);
+      leg.position.set(dx, 0.435, dz);
+      group.add(leg);
+    }
+  }
+  group.position.set(x, 0, z);
+  group.castShadow = true;
+  scene.add(group);
+  return group;
+}
+
+function createChair(x, z, angle) {
+  const group = new THREE.Group();
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.4), chairMat);
+  seat.position.y = 0.5;
+  group.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.04), chairMat);
+  back.position.set(0, 0.7, -0.2);
+  group.add(back);
+  for (let dx of [-0.15, 0.15]) for (let dz of [-0.15, 0.15]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.48, 4), chairMat);
+    leg.position.set(dx, 0.24, dz);
+    group.add(leg);
+  }
+  group.position.set(x, 0, z);
+  group.rotation.y = angle;
+  group.castShadow = true;
+  scene.add(group);
+  return group;
+}
+
+const tablePositions = [
+  [3, 3], [3, 5.5], [3, 8.5], [3, 11.5],
+  [6.5, 3], [6.5, 6], [6.5, 9], [6.5, 12],
+  [10, 3.5], [10, 6.5], [10, 10], [10, 13],
+  [13.5, 4], [13.5, 7.5], [13.5, 11],
+  [16, 5], [16, 8], [16, 11],
+];
+const tables = [];
+let ti = 0;
+for (const [tx, tz] of tablePositions) {
+  const round = ti % 3 === 0;
+  const t = createTable(tx, tz, round);
+  tables.push(t);
+  const chairAngles = round ? [0, 1.57, 3.14, 4.71] : [0, 3.14];
+  const chairDist = round ? 0.7 : 0.5;
+  for (const ca of chairAngles) {
+    const cx = tx + Math.sin(ca) * chairDist;
+    const cz = tz + Math.cos(ca) * chairDist;
+    createChair(cx, cz, ca);
+  }
+  ti++;
+}
+
+const counterMat = new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.9, metalness: 0.3 });
+const counterTopMat = new THREE.MeshStandardMaterial({ color: 0x2a2a33, roughness: 0.6, metalness: 0.4 });
+function createCounter(x, z, w, d, angle=0) {
+  const base = new THREE.Mesh(new THREE.BoxGeometry(w, 0.9, d), counterMat);
+  base.position.set(x, 0.45, z);
+  base.rotation.y = angle;
+  base.castShadow = true; base.receiveShadow = true;
+  scene.add(base);
+  const top = new THREE.Mesh(new THREE.BoxGeometry(w + 0.05, 0.04, d + 0.05), counterTopMat);
+  top.position.set(x, 0.92, z);
+  top.rotation.y = angle;
+  scene.add(top);
+  return base;
+}
+createCounter(19, 4, 4, 0.7);
+createCounter(19, 7.5, 4, 0.7);
+createCounter(22, 5, 0.7, 3.5, 0);
+createCounter(24, 5.5, 0.7, 2, 0);
+
+const stoveMat = new THREE.MeshStandardMaterial({ color: 0x222233, roughness: 0.5, metalness: 0.7 });
+const stove = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.9, 0.7), stoveMat);
+stove.position.set(21.5, 0.45, 8);
+stove.castShadow = true;
+scene.add(stove);
+const burnerMat = new THREE.MeshStandardMaterial({ color: 0x441100, emissive: 0xff4400, emissiveIntensity: 0.2 });
+for (let dx of [-0.3, 0.3]) {
+  const burner = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.02, 8), burnerMat);
+  burner.position.set(21.5 + dx, 0.92, 8);
+  scene.add(burner);
+}
+
+const boothMat = new THREE.MeshStandardMaterial({ color: 0x1a1418, roughness: 0.95 });
+function createBooth(x, z, w, d, angle=0) {
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(w, 0.5, d), boothMat);
+  seat.position.set(x, 0.25, z);
+  seat.rotation.y = angle;
+  seat.castShadow = true;
+  scene.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, d), boothMat);
+  back.position.set(x + (angle === 0 ? -w/2-0.04 : 0), 0.55, z);
+  back.rotation.y = angle;
+  scene.add(back);
+}
+createBooth(1.5, 3, 0.6, 2.5, 0);
+createBooth(1.5, 6.5, 0.6, 2.5, 0);
+createBooth(3.5, 1.5, 2.5, 0.6, 1.57);
+createBooth(7, 1.5, 2.5, 0.6, 1.57);
+
+const hostMat = new THREE.MeshStandardMaterial({ color: 0x2a2218, roughness: 0.8 });
+const hostStand = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.0, 0.4), hostMat);
+hostStand.position.set(7.5, 0.5, 17);
+hostStand.castShadow = true;
+scene.add(hostStand);
+const hostTop = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.5), new THREE.MeshStandardMaterial({ color: 0x333322 }));
+hostTop.position.set(7.5, 1.02, 17);
+scene.add(hostTop);
+
+const trashMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8, metalness: 0.6 });
+const trash = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.5, 8), trashMat);
+trash.position.set(19, 0.25, 10);
+scene.add(trash);
+
+// =====================================================================
+//   ZOMBIES
+// =====================================================================
+const zombies = [];
+let zombieIdCounter = 0;
+
+const zombieSkinMats = [
+  new THREE.MeshStandardMaterial({ color: 0x3a3a2a, roughness: 0.9, metalness: 0 }),
+  new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 0.9, metalness: 0 }),
+  new THREE.MeshStandardMaterial({ color: 0x3a2a2a, roughness: 0.9, metalness: 0 }),
+  new THREE.MeshStandardMaterial({ color: 0x2a3a3a, roughness: 0.9, metalness: 0 }),
+];
+const zombieClothMats = [
+  new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.85 }),
+  new THREE.MeshStandardMaterial({ color: 0x221a1a, roughness: 0.85 }),
+  new THREE.MeshStandardMaterial({ color: 0x1a221a, roughness: 0.85 }),
+  new THREE.MeshStandardMaterial({ color: 0x22221a, roughness: 0.85 }),
+];
+const zombieEyeMat = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffff88, emissiveIntensity: 0.05 });
+
+function createZombie(x, z, sitting=false) {
+  const group = new THREE.Group();
+  const skinMat = zombieSkinMats[Math.floor(Math.random() * zombieSkinMats.length)];
+  const clothMat = zombieClothMats[Math.floor(Math.random() * zombieClothMats.length)];
+
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.6, 6), clothMat);
+  body.position.y = 0.5;
+  body.castShadow = true;
+  group.add(body);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), skinMat);
+  head.position.set(0, 0.95, sitting ? 0.1 : 0);
+  head.castShadow = true;
+  group.add(head);
+
+  const eyeGeo = new THREE.SphereGeometry(0.025, 6, 6);
+  for (let dx of [-0.06, 0.06]) {
+    const eye = new THREE.Mesh(eyeGeo, zombieEyeMat);
+    eye.position.set(dx, 0.98, sitting ? -0.1 : -0.13);
+    group.add(eye);
+  }
+
+  const armMat = skinMat;
+  const armGeo = new THREE.CylinderGeometry(0.025, 0.035, 0.4, 4);
+  for (let dx of [-0.2, 0.2]) {
+    const arm = new THREE.Mesh(armGeo, armMat);
+    arm.position.set(dx, 0.5, 0);
+    arm.rotation.z = dx > 0 ? -0.8 : 0.8;
+    arm.rotation.x = sitting ? 0.5 : -0.3;
+    group.add(arm);
+  }
+
+  if (!sitting) {
+    const legMat = clothMat;
+    const legGeo = new THREE.CylinderGeometry(0.025, 0.035, 0.4, 4);
+    for (let dx of [-0.08, 0.08]) {
+      const leg = new THREE.Mesh(legGeo, legMat);
+      leg.position.set(dx, 0.15, 0);
+      group.add(leg);
+    }
+  }
+
+  group.position.set(x, 0, z);
+  if (sitting) group.rotation.y = Math.random() * Math.PI * 2;
+
+  scene.add(group);
+
+  const id = zombieIdCounter++;
+  const zombie = {
+    id, group, sitting,
+    state: sitting ? 'idle' : 'patrol',
+    basePos: new THREE.Vector3(x, 0, z),
+    targetPos: new THREE.Vector3(x, 0, z),
+    moveTimer: 0,
+    speed: 0.6 + Math.random() * 0.4,
+    animTime: Math.random() * 10,
+    aware: false, attackTimer: 0, grabbed: false,
+    active: true, groaning: false,
+  };
+  zombies.push(zombie);
+  return zombie;
+}
+
+// Sitting zombies
+const tableCells = [
+  [3, 3], [3, 5.5], [3, 8.5],
+  [6.5, 3], [6.5, 6], [6.5, 9],
+  [10, 3.5], [10, 6.5],
+  [13.5, 4], [13.5, 7.5],
+  [16, 5], [16, 8],
+];
+for (const [tx, tz] of tableCells) {
+  const count = Math.random() > 0.5 ? 2 : 1;
+  for (let i = 0; i < count; i++) {
+    const angle = (i === 0) ? 0 : Math.PI;
+    const zx = tx + Math.sin(angle) * 0.5;
+    const zz = tz + Math.cos(angle) * 0.5;
+    createZombie(zx, zz, true);
+  }
+}
+
+// Standing zombies
+const standingPositions = [
+  [4, 10.5], [8, 5], [12, 11.5], [15, 6], [17, 13],
+  [5.5, 13], [9, 8], [14, 9], [11, 4], [7, 11],
+];
+for (const [sx, sz] of standingPositions) createZombie(sx, sz, false);
+
+// Kitchen zombies
+createZombie(20, 4, true);
+createZombie(22, 7, true);
+createZombie(19, 9, true);
+createZombie(24, 6, false);
+createZombie(19, 13, false);
+createZombie(21, 18, true);
+
+// Entrance zombies
+createZombie(7, 18, true);
+createZombie(12, 18, true);
+createZombie(15, 17, false);
+
+// =====================================================================
+//   ZOMBIE AI
+// =====================================================================
+function updateZombies(delta, playerPos) {
+  const diffSettings = DIFFICULTY || DIFF.normal;
+
+  for (const z of zombies) {
+    if (!z.active) continue;
+    z.animTime += delta;
+
+    const dist = playerPos.distanceTo(z.group.position);
+    const dirToPlayer = new THREE.Vector3().subVectors(playerPos, z.group.position);
+    dirToPlayer.y = 0;
+    const lookAngle = Math.atan2(dirToPlayer.x, dirToPlayer.z);
+
+    // Awareness — difficulty affects aggro range
+    if (dist < diffSettings.aggroRange && z.state !== 'dead') {
+      if (!z.aware) {
+        z.aware = true;
+        z.state = 'chasing';
+        playSound('groan');
+        if (Math.random() > 0.6) playSound('chatter');
+      }
+    } else if (dist > 10 && z.aware) {
+      z.aware = false;
+      z.state = z.sitting ? 'idle' : 'patrol';
+    }
+
+    if (z.state === 'chasing') {
+      // Difficulty affects speed
+      const chaseSpeed = z.speed * diffSettings.zombieSpeed;
+      z.group.rotation.y += (lookAngle - z.group.rotation.y) * 0.05;
+
+      const moveDir = new THREE.Vector3().subVectors(playerPos, z.group.position).normalize();
+      moveDir.y = 0;
+      z.group.position.x += moveDir.x * chaseSpeed * delta;
+      z.group.position.z += moveDir.z * chaseSpeed * delta;
+
+      z.group.position.x = Math.max(0.5, Math.min(REST_W - 0.5, z.group.position.x));
+      z.group.position.z = Math.max(0.5, Math.min(REST_D - 0.5, z.group.position.z));
+
+      const bob = Math.sin(z.animTime * 8) * 0.01;
+      z.group.position.y = bob;
+
+      if (Math.random() > 0.997 && !z.groaning) {
+        z.groaning = true;
+        playSound('groan');
+        setTimeout(() => z.groaning = false, 2000);
+      }
+
+      // Attack — difficulty affects damage
+      if (dist < 0.9) {
+        z.attackTimer += delta;
+        if (z.attackTimer > 0.8 && !z.grabbed) {
+          z.attackTimer = 0;
+          health -= diffSettings.zombieDmg;
+          updateHealth();
+          bloodOverlay.classList.add('show');
+          setTimeout(() => bloodOverlay.classList.remove('show'), 300);
+          playSound('scream');
+
+          if (health <= 0) {
+            gameOverScene('death');
+          }
+        }
+      } else {
+        z.attackTimer = 0;
+      }
+
+      z.group.children.forEach((child, i) => {
+        if (i >= 5 && i <= 6) {
+          child.rotation.x = Math.sin(z.animTime * 4 + i) * 0.2 - 0.3;
+        }
+      });
+
+    } else if (z.state === 'patrol') {
+      z.moveTimer += delta;
+      if (z.moveTimer > 3 + Math.random() * 2) {
+        z.moveTimer = 0;
+        const angle = Math.random() * Math.PI * 2;
+        const dist2 = 1 + Math.random();
+        z.targetPos.set(
+          z.basePos.x + Math.cos(angle) * dist2,
+          0,
+          z.basePos.z + Math.sin(angle) * dist2
+        );
+        z.targetPos.x = Math.max(1, Math.min(REST_W - 1, z.targetPos.x));
+        z.targetPos.z = Math.max(1, Math.min(REST_D - 1, z.targetPos.z));
+        playSound('creak');
+      }
+
+      const toTarget = new THREE.Vector3().subVectors(z.targetPos, z.group.position);
+      if (toTarget.length() > 0.2) {
+        toTarget.normalize();
+        z.group.position.x += toTarget.x * z.speed * 0.5 * delta;
+        z.group.position.z += toTarget.z * z.speed * 0.5 * delta;
+        z.group.rotation.y += (Math.atan2(toTarget.x, toTarget.z) - z.group.rotation.y) * 0.05;
+        z.group.position.y = Math.sin(z.animTime * 5) * 0.008;
+      }
+
+    } else if (z.state === 'idle') {
+      if (Math.random() > 0.998) {
+        z.group.children[1].rotation.x = (Math.random() - 0.5) * 0.3;
+        if (Math.random() > 0.5) playSound('creak');
+      }
+      if (dist < 4) {
+        z.group.children[1].rotation.y = (lookAngle - z.group.rotation.y) * 0.3;
+      }
+    }
+  }
+}
+
+// =====================================================================
+//   ITEMS
+// =====================================================================
+const items = [];
+let hasKey = false;
+let notesFound = 0;
+
+function createPickupItem(x, z, type, text, label) {
+  const group = new THREE.Group();
+  if (type === 'note') {
+    const noteMat = new THREE.MeshStandardMaterial({ color: 0x332211, emissive: 0x664422, emissiveIntensity: 0.08 });
+    const note = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.005, 0.15), noteMat);
+    note.position.y = 1.0;
+    note.rotation.x = 0.2;
+    group.add(note);
+    const glow = new THREE.PointLight(0x886633, 0.08, 1.5);
+    glow.position.y = 1.0;
+    group.add(glow);
+  } else if (type === 'key') {
+    const keyMat = new THREE.MeshStandardMaterial({ color: 0x886644, emissive: 0xaa8844, emissiveIntensity: 0.1, metalness: 0.8, roughness: 0.3 });
+    const key = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.04, 0.04), keyMat);
+    key.position.y = 1.0;
+    group.add(key);
+    const head = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.015, 6, 8), keyMat);
+    head.position.set(0.07, 1.0, 0);
+    head.rotation.y = Math.PI / 2;
+    group.add(head);
+    const glow = new THREE.PointLight(0xaa8844, 0.12, 2);
+    glow.position.y = 1.0;
+    group.add(glow);
+  } else if (type === 'map') {
+    const mapMat = new THREE.MeshStandardMaterial({ color: 0x443322, emissive: 0x886644, emissiveIntensity: 0.08 });
+    const mapMesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 0.15), mapMat);
+    mapMesh.position.y = 1.0;
+    group.add(mapMesh);
+    const glow = new THREE.PointLight(0x886644, 0.1, 1.8);
+    glow.position.y = 1.0;
+    group.add(glow);
+  }
+  group.position.set(x, 0, z);
+  scene.add(group);
+  items.push({ group, type, text, label, collected: false, pos: new THREE.Vector3(x, 0, z), bobTimer: Math.random() * 6 });
+}
+
+createPickupItem(19.5, 4, 'key', null, 'Rusty Key');
+// Map pickup — near the entrance host stand
+createPickupItem(7.5, 16.5, 'map', null, 'Restaurant Map');
+
+const noteTexts = [
+  "It started with the special. Half-price spaghetti. Everyone who ate it... changed.",
+  "The kitchen staff were the first to go. Chef Marco is still back there, stirring.",
+  "I hid in the bathroom when the screaming started. That was three hours ago.",
+  "They don't see well. Stay still and they might walk right past you.",
+  "The manager locked the front door before he turned. No one can get out.",
+  "I saw Mr. Henderson from the diner booth. He was eating his own hand.",
+  "The emergency exit in the back leads to the alley. I can see the street lights.",
+  "Don't let them grab you. Once they get a hold, they don't let go.",
+  "The lights flicker when they're near. I don't know why. But it's the only warning you get.",
+];
+const notePositions = [
+  [5, 7], [8, 10], [12, 3.5], [15.5, 10],
+  [4, 14], [11, 12], [17, 2.5],
+  [2.5, 10.5], [14, 12.5],
+];
+for (let i = 0; i < notePositions.length && i < noteTexts.length; i++) {
+  const [nx, nz] = notePositions[i];
+  createPickupItem(nx, nz, 'note', noteTexts[i], `Note ${i+1}`);
+}
+
+// =====================================================================
+//   GAME STATE
+// =====================================================================
+let locked = true;
+let health = 100;
+let panic = 0;
+let gameOver = false;
+
+// Flashlight state
+let flashlightOn = true;
+const flashlightBtn = document.getElementById('flashlight-btn');
+flashlightBtn.addEventListener('click', toggleFlashlight);
+
+function toggleFlashlight() {
+  flashlightOn = !flashlightOn;
+  const baseIntensity = 80;
+  flashlight.intensity = flashlightOn ? baseIntensity : 0.1;
+  flashlightBtn.textContent = flashlightOn ? '\u{1F526} ON' : '\u{1F526} OFF';
+  flashlightBtn.classList.toggle('off', !flashlightOn);
+}
+
+// =====================================================================
+//   PAUSE / MAP / INVENTORY
+// =====================================================================
+let pauseMenuOpen = false;
+let hasMap = false;
+const inventoryItems = [];
+
+const pauseOverlay = document.getElementById('pause-overlay');
+const mapOverlay = document.getElementById('map-overlay');
+const invOverlay = document.getElementById('inv-overlay');
+const mapCanvas = document.getElementById('map-canvas');
+const invGrid = document.getElementById('inv-grid');
+const btnPause = document.getElementById('btn-pause');
+const btnMap = document.getElementById('btn-map');
+const btnInv = document.getElementById('btn-inv');
+
+// Pause toggle (Escape key + button)
+btnPause.addEventListener('click', togglePause);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !gameOver && !locked) togglePause();
+  if (e.key === 'm' || e.key === 'M') { if (hasMap) { toggleMap(); e.preventDefault(); } }
+  if (e.key === 'i' || e.key === 'I') { toggleInventory(); e.preventDefault(); }
+});
+
+document.getElementById('btn-resume').addEventListener('click', togglePause);
+document.getElementById('btn-quit').addEventListener('click', () => {
+  pauseOverlay.classList.remove('show');
+  pauseMenuOpen = false;
+  location.reload();
+});
+document.getElementById('btn-close-map').addEventListener('click', toggleMap);
+document.getElementById('btn-close-inv').addEventListener('click', toggleInventory);
+
+// Map button click
+btnMap.addEventListener('click', toggleMap);
+btnInv.addEventListener('click', toggleInventory);
+
+function togglePause() {
+  pauseMenuOpen = !pauseMenuOpen;
+  pauseOverlay.classList.toggle('show', pauseMenuOpen);
+  document.getElementById('crosshair').style.opacity = pauseMenuOpen ? '0' : '0.5';
+}
+
+function toggleMap() {
+  const isOpen = mapOverlay.classList.toggle('show');
+  if (isOpen) renderMap();
+  pauseMenuOpen = isOpen;
+  document.getElementById('crosshair').style.opacity = isOpen ? '0' : '0.5';
+}
+
+function toggleInventory() {
+  const isOpen = invOverlay.classList.toggle('show');
+  if (isOpen) renderInventory();
+  pauseMenuOpen = isOpen;
+  document.getElementById('crosshair').style.opacity = isOpen ? '0' : '0.5';
+}
+
+function unlockMap() {
+  hasMap = true;
+  btnMap.classList.remove('locked');
+  showSubtitle("Found the restaurant map. Press M or click MAP to view.", 4);
+}
+
+// Draw the restaurant map on a canvas
+function renderMap() {
+  const ctx = mapCanvas.getContext('2d');
+  const w = mapCanvas.width, h = mapCanvas.height;
+  ctx.fillStyle = '#0a0a0e';
+  ctx.fillRect(0, 0, w, h);
+
+  const scaleX = w / (REST_W + 2);
+  const scaleY = h / (REST_D + 2);
+  const pad = 4;
+
+  // Draw walls
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 1.5;
+
+  // Outer walls
+  ctx.strokeRect(pad, pad, w - pad*2, h - pad*2);
+
+  // Interior walls
+  const walls = [
+    [18, 2, 18, 12], [18, 12, 18, 16], [18, 16, 18, 20],
+    [2, 16, 10, 16], [10, 16, 18, 16],
+  ];
+  ctx.strokeStyle = '#444';
+  for (const [x1, z1, x2, z2] of walls) {
+    ctx.beginPath();
+    ctx.moveTo(pad + x1 * scaleX, pad + z1 * scaleY);
+    ctx.lineTo(pad + x2 * scaleX, pad + z2 * scaleY);
+    ctx.stroke();
+  }
+
+  // Room labels
+  ctx.fillStyle = '#555';
+  ctx.font = '8px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('DINING', pad + 9 * scaleX, pad + 8 * scaleY);
+  ctx.fillText('KITCHEN', pad + 22 * scaleX, pad + 7 * scaleY);
+  ctx.fillText('ENTRANCE', pad + 9 * scaleX, pad + 18 * scaleY);
+  ctx.fillText('HALL', pad + 22 * scaleX, pad + 14 * scaleY);
+  ctx.fillText('WC', pad + 22 * scaleX, pad + 18.5 * scaleY);
+
+  // Key location marker
+  ctx.fillStyle = '#aa4';
+  ctx.font = '10px sans-serif';
+  ctx.fillText('\u{1F511}', pad + 19.5 * scaleX, pad + 4.5 * scaleY);
+
+  // Exit marker
+  ctx.fillStyle = '#4a8';
+  ctx.fillText('EXIT', pad + 14 * scaleX, pad + 22 * scaleY);
+
+  // Player position
+  ctx.fillStyle = '#4af';
+  ctx.beginPath();
+  ctx.arc(pad + camera.position.x * scaleX, pad + camera.position.z * scaleY, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Direction indicator
+  const dir = new THREE.Vector3(0, 0, -1);
+  dir.applyQuaternion(camera.quaternion);
+  ctx.strokeStyle = '#4af';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(pad + camera.position.x * scaleX, pad + camera.position.z * scaleY);
+  ctx.lineTo(
+    pad + (camera.position.x + dir.x * 1.5) * scaleX,
+    pad + (camera.position.z + dir.z * 1.5) * scaleY
+  );
+  ctx.stroke();
+
+  // Note count
+  ctx.fillStyle = '#886';
+  ctx.font = '7px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Notes: ${notesFound}/${noteTexts.length}`, pad + 4, h - 6);
+}
+
+function renderInventory() {
+  invGrid.innerHTML = '';
+  const allItems = [];
+
+  if (hasKey) allItems.push({ icon: '\u{1F511}', label: 'Rusty Key' });
+  if (hasMap) allItems.push({ icon: '\u{1F5FA}', label: 'Restaurant Map' });
+  if (notesFound > 0) allItems.push({ icon: '\u{1F4C4}', label: `Notes (${notesFound})` });
+
+  if (allItems.length === 0) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'color:#444;font-size:0.8rem;letter-spacing:2px;';
+    empty.textContent = 'Empty';
+    invGrid.appendChild(empty);
+  } else {
+    for (const item of allItems) {
+      const slot = document.createElement('div');
+      slot.className = 'inv-slot filled';
+      slot.innerHTML = `<div class="icon">${item.icon}</div><div class="label">${item.label}</div>`;
+      invGrid.appendChild(slot);
+    }
+  }
+}
+
+// =====================================================================
+//   CONTROLS
+// =====================================================================
+const keys = { w: false, a: false, s: false, d: false, e: false };
+let yaw = 0, pitch = 0;
+const walkSpeed = 2.8;
+const mouseSensitivity = 0.002;
+
+let bobTimer = 0;
+let isMoving = false;
+let breathTimer = 0;
+
+document.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if (k in keys) keys[k] = true;
+  if (e.key === 'e' || e.key === 'E') keys.e = true;
+  // F key toggles flashlight
+  if (k === 'f' && !locked) toggleFlashlight();
+});
+document.addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  if (k in keys) keys[k] = false;
+  if (e.key === 'e' || e.key === 'E') keys.e = false;
+});
+
+// Pointer lock — click on game to lock mouse, Escape to release
+// Crosshair stays visible either way
+document.addEventListener('mousemove', (e) => {
+  if (document.pointerLockElement === renderer.domElement) {
+    yaw -= e.movementX * mouseSensitivity;
+    pitch -= e.movementY * mouseSensitivity;
+    pitch = Math.max(-1.1, Math.min(1.2, pitch));
+  }
+});
+
+// Click on game canvas = lock pointer for FPS look
+renderer.domElement.addEventListener('click', () => {
+  if (!locked && !gameOver && !pauseMenuOpen) {
+    renderer.domElement.requestPointerLock();
+  }
+});
+// Right-click also works
+renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// =====================================================================
+//   COLLISION
+// =====================================================================
+function canMoveTo(x, z) {
+  const margin = 0.2;
+  if (x < margin || x > REST_W - margin || z < margin || z > REST_D - margin) return false;
+  for (const t of tables) {
+    const dx = x - t.position.x;
+    const dz = z - t.position.z;
+    if (Math.abs(dx) < 0.8 && Math.abs(dz) < 0.8) return false;
+  }
+  const counterZones = [
+    { x: 19, z: 4, w: 4, d: 0.7 },
+    { x: 19, z: 7.5, w: 4, d: 0.7 },
+    { x: 22, z: 5, w: 0.7, d: 3.5 },
+    { x: 24, z: 5.5, w: 0.7, d: 2 },
+  ];
+  for (const c of counterZones) {
+    if (Math.abs(x - c.x) < c.w/2 + margin && Math.abs(z - c.z) < c.d/2 + margin) return false;
+  }
+  return true;
+}
+
+// =====================================================================
+//   INTERACTION
+// =====================================================================
+let nearestItem = null;
+
+function checkInteraction() {
+  const playerPos = camera.position;
+  nearestItem = null;
+  let nearestDist = 2.0;
+
+  for (const item of items) {
+    if (item.collected) continue;
+    const dist = playerPos.distanceTo(item.pos);
+    if (dist < nearestDist) { nearestDist = dist; nearestItem = item; }
+  }
+
+  const exitPos = new THREE.Vector3(14, 0, REST_D + 0.5);
+  const exitDist = playerPos.distanceTo(exitPos);
+  if (exitDist < 2.0 && hasKey) {
+    interactHint.textContent = '[E] Open exit door';
+    interactHint.classList.add('show');
+    if (keys.e) { keys.e = false; gameOverScene('win'); }
+    return;
+  } else if (exitDist < 2.0 && !hasKey) {
+    interactHint.textContent = 'The door is locked. Find a key.';
+    interactHint.classList.add('show');
+    return;
+  }
+
+  if (nearestItem) {
+    interactHint.textContent = `[E] ${nearestItem.label}`;
+    interactHint.classList.add('show');
+    if (keys.e && !gameOver) { keys.e = false; pickupItem(nearestItem); }
+  } else {
+    interactHint.classList.remove('show');
+  }
+}
+
+function pickupItem(item) {
+  if (item.collected) return;
+  item.collected = true;
+  scene.remove(item.group);
+
+  if (item.type === 'key') {
+    hasKey = true;
+    showSubtitle("Got the Rusty Key. The exit door is near the entrance.", 5);
+    updateItemsHud();
+    playSound('creak');
+  } else if (item.type === 'map') {
+    unlockMap();
+    updateItemsHud();
+    playSound('creak');
+  } else if (item.type === 'note') {
+    notesFound++;
+    showSubtitle(`"${item.text}"`, 5);
+    panic = Math.max(0, panic - 10);
+    updatePanic();
+    playSound('creak');
+    updateItemsHud();
+  }
+}
+
+function updateItemsHud() {
+  itemsHud.innerHTML = '';
+  if (hasKey) {
+    const el = document.createElement('div'); el.className = 'item';
+    el.textContent = '\u{1F511} Rusty Key'; itemsHud.appendChild(el);
+  }
+  if (hasMap) {
+    const el = document.createElement('div'); el.className = 'item';
+    el.textContent = '\u{1F5FA} Map'; itemsHud.appendChild(el);
+  }
+  if (notesFound > 0) {
+    const el = document.createElement('div'); el.className = 'item';
+    el.textContent = `\u{1F4C4} Notes: ${notesFound}/${noteTexts.length}`; itemsHud.appendChild(el);
+  }
+}
+
+// =====================================================================
+//   UI UPDATES
+// =====================================================================
+function updateHealth() {
+  health = Math.max(0, Math.min(100, health));
+  healthFill.style.width = health + '%';
+  healthPct.textContent = Math.round(health);
+}
+
+function updatePanic() {
+  panic = Math.max(0, Math.min(100, panic));
+  panicFill.style.width = panic + '%';
+  panicPct.textContent = Math.round(panic);
+}
+
+function showSubtitle(text, duration = 4) {
+  subtitleEl.textContent = text;
+  subtitleEl.classList.add('show');
+  setTimeout(() => subtitleEl.classList.remove('show'), duration * 1000);
+}
+
+// =====================================================================
+//   GAME OVER
+// =====================================================================
+function gameOverScene(type) {
+  if (gameOver) return;
+  gameOver = true;
+
+  if (type === 'death') {
+    bloodOverlay.classList.add('show');
+    showSubtitle("The hungry ones got you...", 999);
+    setTimeout(() => {
+      document.getElementById('title-screen').classList.remove('hidden');
+      document.getElementById('title-screen').innerHTML = `
+        <h1>YOU ARE DINNER</h1>
+        <div class="sub">The customers ate well tonight.</div>
+        <div class="sub" style="margin-top:15px;color:#555">Notes found: ${notesFound}/${noteTexts.length}</div>
+        <button class="start-btn" onclick="location.reload()">TRY AGAIN</button>
+      `;
+    }, 3000);
+  } else if (type === 'win') {
+    showSubtitle("You got out. But they're still in there.", 999);
+    setTimeout(() => {
+      scene.fog = null;
+      scene.background = new THREE.Color(0x223344);
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      dirLight.position.set(0, 5, -5);
+      scene.add(dirLight);
+
+      document.getElementById('title-screen').classList.remove('hidden');
+      document.getElementById('title-screen').innerHTML = `
+        <h1 style="color:#4a8">YOU ESCAPED</h1>
+        <div class="sub">The alley is empty. You can hear them inside, still eating.</div>
+        <div class="sub" style="margin-top:15px;color:#555">Notes found: ${notesFound}/${noteTexts.length}</div>
+        <button class="start-btn" onclick="location.reload()" style="border-color:#284;color:#4a8">PLAY AGAIN</button>
+      `;
+    }, 3000);
+  }
+}
+
+// =====================================================================
+//   RESIZE
+// =====================================================================
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// =====================================================================
+//   GAME LOOP
+// =====================================================================
+let lastTime = performance.now();
+let eventTimer = 3 + Math.random() * 5;
+let DIFFICULTY = DIFF.normal; // fallback
+
+function gameLoop(time) {
+  requestAnimationFrame(gameLoop);
+
+  const delta = Math.min((time - lastTime) / 1000, 0.05);
+  lastTime = time;
+  breathTimer += delta;
+
+  if (!locked && !gameOver && !pauseMenuOpen) {
+    const speed = walkSpeed;
+    const forward = new THREE.Vector3(0, 0, -1);
+    forward.applyQuaternion(camera.quaternion);
+    forward.y = 0; forward.normalize();
+
+    const right = new THREE.Vector3(1, 0, 0);
+    right.applyQuaternion(camera.quaternion);
+    right.y = 0; right.normalize();
+
+    let moveX = 0, moveZ = 0;
+    isMoving = false;
+    if (keys.w) { moveX += forward.x; moveZ += forward.z; isMoving = true; }
+    if (keys.s) { moveX -= forward.x; moveZ -= forward.z; isMoving = true; }
+    if (keys.a) { moveX -= right.x; moveZ -= right.z; isMoving = true; }
+    if (keys.d) { moveX += right.x; moveZ += right.z; isMoving = true; }
+
+    const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
+    if (len > 0) {
+      moveX = (moveX / len) * speed * delta;
+      moveZ = (moveZ / len) * speed * delta;
+      const newX = camera.position.x + moveX;
+      const newZ = camera.position.z + moveZ;
+      if (canMoveTo(newX, camera.position.z)) camera.position.x = newX;
+      if (canMoveTo(camera.position.x, newZ)) camera.position.z = newZ;
+    }
+
+    // RE7 head bob
+    if (isMoving) {
+      bobTimer += delta * 7;
+      const bobY = Math.abs(Math.cos(bobTimer)) * 0.012;
+      camera.position.y = 1.65 + bobY;
+      camera.rotation.z = Math.sin(bobTimer * 0.5) * 0.002;
+    } else {
+      camera.position.y = 1.65 + Math.sin(breathTimer * 1.8) * 0.003;
+      camera.rotation.z = Math.sin(breathTimer * 1.4) * 0.001;
+      bobTimer = 0;
+    }
+
+    camera.rotation.order = 'YXZ';
+    camera.rotation.y = yaw;
+    camera.rotation.x = pitch;
+
+    // Panic
+    let closestZombie = Infinity;
+    for (const z of zombies) {
+      if (!z.active) continue;
+      const d = camera.position.distanceTo(z.group.position);
+      if (d < closestZombie) closestZombie = d;
+      if (d < 4 && z.state === 'chasing') {
+        panic += delta * (15 * (DIFFICULTY.panicDrainMul || 1));
+      }
+    }
+    if (closestZombie > 8) panic = Math.max(0, panic - delta * 5);
+    if (closestZombie < 3) panic = Math.min(100, panic + delta * (20 * (DIFFICULTY.panicDrainMul || 1)));
+    updatePanic();
+
+    if (panic > 60) {
+      camera.position.x += (Math.random() - 0.5) * 0.004 * (panic / 50);
+      camera.position.z += (Math.random() - 0.5) * 0.004 * (panic / 50);
+      if (Math.random() > 0.97) playSound('heartbeat');
+    }
+    if (panic > 80) {
+      if (Math.random() > 0.92) {
+        flashlightUI.style.opacity = '0.3';
+        setTimeout(() => flashlightUI.style.opacity = '1', 50 + Math.random() * 100);
+      }
+    }
+
+    // Random events
+    eventTimer -= delta;
+    if (eventTimer <= 0) {
+      eventTimer = 5 + Math.random() * 8;
+      const roll = Math.random();
+      if (roll < 0.3) playSound('creak');
+      else if (roll < 0.55 && panic < 70) {
+        playSound('groan');
+        showSubtitle("*distant groaning*", 2);
+        panic += 5; updatePanic();
+      } else if (roll < 0.7) playSound('chatter');
+      else if (roll < 0.8) {
+        for (const cl of ceilingLights) cl.light.intensity = cl.base * 0.1;
+        setTimeout(() => {
+          for (const cl of ceilingLights) cl.light.intensity = cl.base;
+        }, 200 + Math.random() * 400);
+      }
+    }
+
+    updateZombies(delta, camera.position);
+    checkInteraction();
+
+    for (const cl of ceilingLights) {
+      const f = Math.sin(time * cl.speed + cl.phase) * 0.2 + 0.8;
+      cl.light.intensity = cl.base * f * (0.9 + Math.random() * 0.1);
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+
+gameLoop(performance.now());
+
+console.log('THE LAST MEAL — Restaurant Horror');
+console.log('Difficulty:', difficulty);
+console.log('Find the key in the kitchen. Escape through the exit.');
+</script>
+</body>
+</html>
