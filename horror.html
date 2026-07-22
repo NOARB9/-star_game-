@@ -164,6 +164,17 @@
     opacity: 0.5;
   }
 
+  #ammo-hud {
+    position: fixed; bottom: 80px; right: 40px;
+    z-index: 10; pointer-events: none;
+    font-size: 1.6rem; color: #ddd; letter-spacing: 2px;
+    font-family: 'Courier New', monospace;
+    text-shadow: 0 0 8px rgba(255,255,255,0.3);
+  }
+  #ammo-hud .ammo-count { font-size: 2.2rem; font-weight: bold; }
+  #ammo-hud .ammo-label { font-size: 0.7rem; color: #777; display: block; }
+  #ammo-hud.empty { color: #a44; }
+
   #flashlight-ui {
     position: fixed; inset: 0; z-index: 5;
     pointer-events: none;
@@ -423,6 +434,7 @@
 
 <!-- Crosshair -->
 <div id="crosshair"><div class="dot"></div></div>
+<div id="ammo-hud"><span class="ammo-count">12</span><span class="ammo-label">ROUNDS</span></div>
 
 <!-- Action buttons -->
 <div id="action-btns">
@@ -508,7 +520,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.5;
+renderer.toneMappingExposure = 0.8;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.prepend(renderer.domElement);
 
@@ -659,6 +671,40 @@ function playSound(type) {
     gain.gain.linearRampToValueAtTime(0, now + 2.0);
     src.connect(lpf).connect(gain).connect(masterGain);
     src.start(now); src.stop(now + 2.5);
+  } else if (type === 'gunshot') {
+    // Sharp white noise burst — gunshot
+    const buf = noiseBuffer(0.15, 'white');
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const bp = audioCtx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 600; bp.Q.value = 1;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.5, now + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    src.connect(bp).connect(gain).connect(masterGain);
+    src.start(now); src.stop(now + 0.2);
+    // Low thump for body
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine'; osc.frequency.value = 50;
+    const gain2 = audioCtx.createGain();
+    gain2.gain.setValueAtTime(0.3, now);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    osc.connect(gain2).connect(masterGain);
+    osc.start(now); osc.stop(now + 0.15);
+  } else if (type === 'zombieDie') {
+    // Wet thud + gurgle
+    const buf = noiseBuffer(0.4, 'brown');
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const lpf = audioCtx.createBiquadFilter();
+    lpf.type = 'lowpass'; lpf.frequency.setValueAtTime(400, now);
+    lpf.frequency.exponentialRampToValueAtTime(80, now + 0.3);
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.12, now + 0.05);
+    gain.gain.linearRampToValueAtTime(0.02, now + 0.3);
+    gain.gain.linearRampToValueAtTime(0, now + 0.5);
+    src.connect(lpf).connect(gain).connect(masterGain);
+    src.start(now); src.stop(now + 0.6);
   }
 }
 
@@ -914,7 +960,7 @@ exitSign.position.set(14, 2.6, REST_D + 1);
 scene.add(exitSign);
 
 // --- Lighting ---
-const ambLight = new THREE.AmbientLight(0x111122, 0.15);
+const ambLight = new THREE.AmbientLight(0x222244, 0.5);
 scene.add(ambLight);
 
 const ceilingLights = [];
@@ -931,20 +977,51 @@ const kitchenLight = new THREE.PointLight(0x88bbff, 0.3, 5);
 kitchenLight.position.set(21, WALL_H - 0.3, 6);
 scene.add(kitchenLight);
 
-const flashlight = new THREE.SpotLight(0xffeedd, 80);
-flashlight.angle = 0.4;
-flashlight.penumbra = 0.7;
-flashlight.decay = 2;
-flashlight.distance = 18;
+const flashlight = new THREE.SpotLight(0xffeedd, 140);
+flashlight.angle = 0.55;
+flashlight.penumbra = 0.8;
+flashlight.decay = 1.4;
+flashlight.distance = 25;
 flashlight.castShadow = true;
 flashlight.shadow.mapSize.width = 512;
 flashlight.shadow.mapSize.height = 512;
 camera.add(flashlight);
 camera.add(flashlight.target);
+flashlight.target.position.set(0, 0, -5); // shine straight forward, center of screen
 scene.add(camera);
 
-const playerGlow = new THREE.PointLight(0x334466, 0.15, 4);
+// Spill light — bounced light that fills the room around you when flashlight is on
+const playerGlow = new THREE.PointLight(0xeeddcc, 0.6, 8);
 camera.add(playerGlow);
+
+// --- Gun Model (RE7-style pistol, bottom-right of screen) ---
+const gunGroup = new THREE.Group();
+const gunMetal = new THREE.MeshStandardMaterial({ color: 0x333338, roughness: 0.25, metalness: 0.9 });
+const gunGrip = new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.7 });
+// Slide/body
+const gunBody = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.06, 0.14), gunMetal);
+gunBody.position.set(0, 0, 0);
+gunGroup.add(gunBody);
+// Barrel
+const gunBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.012, 0.08, 8), gunMetal);
+gunBarrel.rotation.x = Math.PI / 2;
+gunBarrel.position.set(0, 0.01, -0.1);
+gunGroup.add(gunBarrel);
+// Grip
+const gunGripMesh = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.07, 0.04), gunGrip);
+gunGripMesh.position.set(0, -0.05, 0.02);
+gunGripMesh.rotation.x = 0.25;
+gunGroup.add(gunGripMesh);
+// Position at bottom-right of view (RE7 style)
+gunGroup.position.set(0.22, -0.18, -0.35);
+gunGroup.rotation.set(-0.1, 0.05, -0.15);
+gunGroup.visible = true;
+camera.add(gunGroup);
+
+// Muzzle flash light (brief bright flash when shooting)
+const muzzleFlash = new THREE.PointLight(0xffaa44, 0, 3);
+muzzleFlash.position.set(0.22, -0.17, -0.45);
+camera.add(muzzleFlash);
 
 // --- Furniture ---
 const tableMat = new THREE.MeshStandardMaterial({ color: 0x2a2218, roughness: 0.9 });
@@ -1391,6 +1468,127 @@ let health = 100;
 let panic = 0;
 let gameOver = false;
 
+// Weapon state
+let hasGun = false;
+let ammo = 0;
+let maxAmmo = 12;
+let recoilAmount = 0;
+const ammoHud = document.getElementById('ammo-hud');
+const ammoCount = ammoHud.querySelector('.ammo-count');
+const raycaster = new THREE.Raycaster();
+raycaster.far = 30;
+
+// Hide gun and ammo HUD until gun is found
+gunGroup.visible = false;
+ammoHud.style.display = 'none';
+
+function updateAmmoHud() {
+  ammoCount.textContent = ammo;
+  ammoHud.classList.toggle('empty', ammo === 0);
+}
+
+function shoot() {
+  if (!hasGun || ammo <= 0 || gameOver || locked || pauseMenuOpen) return;
+  ammo--;
+  updateAmmoHud();
+  recoilAmount = 0.06;
+  // Muzzle flash
+  muzzleFlash.intensity = 8;
+  setTimeout(() => muzzleFlash.intensity = 0, 60);
+  // Gunshot sound
+  playSound('gunshot');
+  // Recoil kick — jerk camera up slightly
+  pitch -= 0.03;
+  // Raycast from camera center
+  raycaster.set(camera.position, new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion));
+  const hits = raycaster.intersectObjects(zombies.map(z => z.group), true);
+  if (hits.length > 0) {
+    // Find which zombie was hit
+    let hitObj = hits[0].object;
+    while (hitObj) {
+      for (const z of zombies) {
+        if (!z.active || z.state === 'dead') continue;
+        if (z.group === hitObj || z.group.children.includes(hitObj)) {
+          killZombie(z);
+          return;
+        }
+      }
+      hitObj = hitObj.parent;
+    }
+  }
+}
+
+function killZombie(z) {
+  z.state = 'dead';
+  z.active = false;
+  // Fall over animation
+  z.group.rotation.x = Math.PI / 2;
+  z.group.position.y = -0.5;
+  // Darken
+  z.group.children.forEach(c => {
+    if (c.material && c.material.emissive) {
+      c.material.emissive.set(0x000000);
+      c.material.emissiveIntensity = 0;
+    }
+  });
+  playSound('zombieDie');
+  showSubtitle('Headshot.', 1.5);
+  panic = Math.max(0, panic - 15);
+  updatePanic();
+}
+
+// Right-click to shoot
+renderer.domElement.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  shoot();
+});
+
+// Ammo pickups
+function createAmmoPickup(x, z, count) {
+  const group = new THREE.Group();
+  const boxMat = new THREE.MeshStandardMaterial({ color: 0x886633, emissive: 0x443322, emissiveIntensity: 0.1, metalness: 0.5, roughness: 0.4 });
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.06), boxMat);
+  box.position.y = 1.0;
+  group.add(box);
+  const glow = new THREE.PointLight(0x886633, 0.08, 1.5);
+  glow.position.y = 1.0;
+  group.add(glow);
+  group.position.set(x, 0, z);
+  scene.add(group);
+  items.push({ group, type: 'ammo', text: null, label: `${count} Rounds`, collected: false, pos: new THREE.Vector3(x, 0, z), bobTimer: Math.random() * 6, ammoCount: count });
+}
+
+// Scatter ammo boxes
+createAmmoPickup(3, 11, 6);
+createAmmoPickup(16, 11, 6);
+createAmmoPickup(21, 4, 6);
+createAmmoPickup(11, 18, 6);
+createAmmoPickup(23, 9, 6);
+
+// Gun pickup — officer's service weapon near the entrance
+(function() {
+  const group = new THREE.Group();
+  const gunMetal = new THREE.MeshStandardMaterial({ color: 0x333338, roughness: 0.25, metalness: 0.9 });
+  const gunGripMat = new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.7 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.12), gunMetal);
+  body.position.set(0, 1.0, 0);
+  group.add(body);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.01, 0.06, 8), gunMetal);
+  barrel.rotation.x = Math.PI / 2;
+  barrel.position.set(0, 1.01, -0.08);
+  group.add(barrel);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.06, 0.035), gunGripMat);
+  grip.position.set(0, 0.96, 0.02);
+  grip.rotation.x = 0.25;
+  group.add(grip);
+  const glow = new THREE.PointLight(0xaa8844, 0.12, 2);
+  glow.position.y = 1.0;
+  group.add(glow);
+  group.position.set(8.5, 0, 17.5);
+  scene.add(group);
+  items.push({ group, type: 'gun', text: null, label: 'Service Pistol', collected: false, pos: new THREE.Vector3(8.5, 0, 17.5), bobTimer: Math.random() * 6 });
+})();
+
 // Flashlight state
 let flashlightOn = true;
 const flashlightBtn = document.getElementById('flashlight-btn');
@@ -1398,8 +1596,9 @@ flashlightBtn.addEventListener('click', toggleFlashlight);
 
 function toggleFlashlight() {
   flashlightOn = !flashlightOn;
-  const baseIntensity = 80;
+  const baseIntensity = 140;
   flashlight.intensity = flashlightOn ? baseIntensity : 0.1;
+  playerGlow.intensity = flashlightOn ? 0.6 : 0.02;
   flashlightBtn.textContent = flashlightOn ? '\u{1F526} ON' : '\u{1F526} OFF';
   flashlightBtn.classList.toggle('off', !flashlightOn);
 }
@@ -1591,24 +1790,31 @@ document.addEventListener('keyup', (e) => {
   if (e.key === 'e' || e.key === 'E') keys.e = false;
 });
 
-// Pointer lock — click on game to lock mouse, Escape to release
-// Crosshair stays visible either way
-document.addEventListener('mousemove', (e) => {
-  if (document.pointerLockElement === renderer.domElement) {
-    yaw -= e.movementX * mouseSensitivity;
-    pitch -= e.movementY * mouseSensitivity;
-    pitch = Math.max(-1.1, Math.min(1.2, pitch));
+// Click-and-drag camera — NO pointer lock, cursor always visible
+let isDragging = false;
+let lastMouseX = 0, lastMouseY = 0;
+
+renderer.domElement.addEventListener('mousedown', (e) => {
+  if (!locked && !gameOver && !pauseMenuOpen && e.button === 0) {
+    isDragging = true;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
   }
 });
 
-// Click on game canvas = lock pointer for FPS look
-renderer.domElement.addEventListener('click', () => {
-  if (!locked && !gameOver && !pauseMenuOpen) {
-    renderer.domElement.requestPointerLock();
+document.addEventListener('mousemove', (e) => {
+  if (isDragging) {
+    const dx = e.clientX - lastMouseX;
+    const dy = e.clientY - lastMouseY;
+    yaw -= dx * mouseSensitivity;
+    pitch -= dy * mouseSensitivity;
+    pitch = Math.max(-1.1, Math.min(1.2, pitch));
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
   }
 });
-// Right-click also works
-renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+
+document.addEventListener('mouseup', () => { isDragging = false; });
 
 // =====================================================================
 //   COLLISION
@@ -1692,6 +1898,20 @@ function pickupItem(item) {
     updatePanic();
     playSound('creak');
     updateItemsHud();
+  } else if (item.type === 'ammo') {
+    ammo += item.ammoCount;
+    updateAmmoHud();
+    showSubtitle(`Picked up ${item.ammoCount} rounds.`, 3);
+    playSound('creak');
+  } else if (item.type === 'gun') {
+    hasGun = true;
+    ammo = 6; // comes loaded
+    gunGroup.visible = true;
+    ammoHud.style.display = 'block';
+    updateAmmoHud();
+    showSubtitle('Found your service pistol. Right-click to shoot.', 5);
+    playSound('creak');
+    updateItemsHud();
   }
 }
 
@@ -1700,6 +1920,10 @@ function updateItemsHud() {
   if (hasKey) {
     const el = document.createElement('div'); el.className = 'item';
     el.textContent = '\u{1F511} Rusty Key'; itemsHud.appendChild(el);
+  }
+  if (hasGun) {
+    const el = document.createElement('div'); el.className = 'item';
+    el.textContent = '\u{1F52B} Service Pistol'; itemsHud.appendChild(el);
   }
   if (hasMap) {
     const el = document.createElement('div'); el.className = 'item';
@@ -1836,6 +2060,13 @@ function gameLoop(time) {
     camera.rotation.order = 'YXZ';
     camera.rotation.y = yaw;
     camera.rotation.x = pitch;
+
+    // Recoil recovery — smoothly return pitch after shooting
+    if (recoilAmount > 0.001) {
+      pitch += recoilAmount;
+      recoilAmount *= 0.85;
+      if (recoilAmount < 0.001) recoilAmount = 0;
+    }
 
     // Panic
     let closestZombie = Infinity;
