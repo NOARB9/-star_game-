@@ -2043,6 +2043,24 @@ function gameLoop(time) {
       const newZ = camera.position.z + moveZ;
       if (canMoveTo(newX, camera.position.z)) camera.position.x = newX;
       if (canMoveTo(camera.position.x, newZ)) camera.position.z = newZ;
+
+      // Push zombies out of the way when walking into them
+      for (const z of zombies) {
+        if (!z.active || z.state === 'dead') continue;
+        const dx = camera.position.x - z.group.position.x;
+        const dz = camera.position.z - z.group.position.z;
+        const d = Math.sqrt(dx * dx + dz * dz);
+        if (d < 0.6 && d > 0.01) {
+          const pushStr = 1.5 * delta;
+          z.group.position.x -= (dx / d) * pushStr;
+          z.group.position.z -= (dz / d) * pushStr;
+          if (z.state === 'chasing') {
+            z.state = 'patrol';
+            z.aware = false;
+            z.moveTimer = 1.5;
+          }
+        }
+      }
     }
 
     // RE7 head bob
