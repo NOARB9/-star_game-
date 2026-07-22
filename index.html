@@ -250,6 +250,21 @@
   }
   .char-card.selected .char-name { color: #ff6600; }
   .char-card.selected .char-id { color: #884400; }
+  .char-card.locked {
+    opacity: 0.35;
+    cursor: not-allowed;
+    filter: grayscale(1);
+  }
+  .char-card.locked:hover {
+    border-color: #222;
+    background: #111;
+  }
+  .char-lock-hint {
+    color: #441100;
+    font-size: 0.55rem;
+    letter-spacing: 2px;
+    margin-top: 4px;
+  }
 </style>
 </head>
 <body>
@@ -334,20 +349,34 @@ if (bestLevel > 0) {
   btnLevels.textContent = 'UNBEATABLE';
 }
 
-// Character data
+// Character data — Franklin always unlocked, others unlocked by reaching certain levels
 const characters = [
-  { name: 'Franklin', id: '#48291', skin: '#6b4c2a', icon: '\u{1F474}', trait: 'The Strategist',
+  { name: 'Franklin', id: '#48291', skin: '#6b4c2a', icon: '\u{1F474}', trait: 'The Strategist', unlockLevel: 0,
     story: 'Franklin got caught doing illegal street races in Los Santos. When the cops cornered him, he rammed their cruiser and made a run for it. They caught him three blocks later. Now Blackridge is his finish line.' },
-  { name: 'Arthur',   id: '#77304', skin: '#d4a574', icon: '\u{1F9D4}', trait: 'The Brawler',
+  { name: 'Arthur',   id: '#77304', skin: '#d4a574', icon: '\u{1F9D4}', trait: 'The Brawler', unlockLevel: 3,
     story: 'Arthur was trying to get to Tahiti — illegally. No passport, no visa, just a forged ticket and a dream. Federal agents picked him up at the dock. They say he fought six of them before the cuffs went on.' },
-  { name: 'Carl',     id: '#55912', skin: '#5c3a1e', icon: '\u{1F9D1}', trait: 'The Hacker',
+  { name: 'Carl',     id: '#55912', skin: '#5c3a1e', icon: '\u{1F9D1}', trait: 'The Hacker', unlockLevel: 5,
     story: 'Carl ran with a hood gang in Grove Street. A turf war went wrong and someone didn\'t make it out. Carl took the fall. He\'s been inside for three years, but he\'s been planning his way out for two.' },
-  { name: 'Tommy',    id: '#66188', skin: '#e0b894', icon: '\u{1F468}', trait: 'The Ghost',
+  { name: 'Tommy',    id: '#66188', skin: '#e0b894', icon: '\u{1F468}', trait: 'The Ghost', unlockLevel: 7,
     story: 'Tommy was laundering money through a chain of car dealerships. The IRS couldn\'t catch him — but a disgruntled accountant could. He walked into Blackridge in a three-piece suit. He plans to walk out in anything.' },
-  { name: 'John',     id: '#33007', skin: '#c99b7a', icon: '\u{1F935}', trait: 'The Lockpick',
+  { name: 'John',     id: '#33007', skin: '#c99b7a', icon: '\u{1F935}', trait: 'The Lockpick', unlockLevel: 10,
     story: 'John Marston was an outlaw. Bank robberies, train heists, you name it. The Bureau finally got him after a shootout in Blackwater. They threw him in Blackridge and threw away the key. That was their mistake.' },
 ];
 let selectedChar = parseInt(localStorage.getItem('pe_char') || '0');
+
+// Track unlocked characters in localStorage (comma-separated indices)
+let unlockedChars = (localStorage.getItem('pe_unlocked') || '0').split(',').map(Number);
+
+function isCharUnlocked(i) {
+  return unlockedChars.includes(i);
+}
+
+function unlockChar(i) {
+  if (!unlockedChars.includes(i)) {
+    unlockedChars.push(i);
+    localStorage.setItem('pe_unlocked', unlockedChars.join(','));
+  }
+}
 
 const charOverlay = document.getElementById('char-overlay');
 const charGrid = document.getElementById('char-grid');
@@ -356,18 +385,23 @@ const btnCharBack = document.getElementById('btn-char-back');
 function buildCharGrid() {
   charGrid.innerHTML = '';
   characters.forEach((ch, i) => {
+    const unlocked = isCharUnlocked(i);
     const card = document.createElement('div');
-    card.className = 'char-card' + (i === selectedChar ? ' selected' : '');
+    card.className = 'char-card' + (i === selectedChar && unlocked ? ' selected' : '') + (!unlocked ? ' locked' : '');
+    const lockHint = !unlocked ? `<div class="char-lock-hint">ESCAPE LEVEL ${ch.unlockLevel}</div>` : '';
     card.innerHTML = `
-      <div class="char-avatar">${ch.icon}</div>
-      <div class="char-name">${ch.name.toUpperCase()}</div>
-      <div class="char-id">${ch.id}</div>
+      <div class="char-avatar">${unlocked ? ch.icon : '&#128274;'}</div>
+      <div class="char-name">${unlocked ? ch.name.toUpperCase() : '???'}</div>
+      <div class="char-id">${unlocked ? ch.id : 'LOCKED'}</div>
+      ${lockHint}
     `;
-    card.addEventListener('click', () => {
-      selectedChar = i;
-      localStorage.setItem('pe_char', i);
-      buildCharGrid();
-    });
+    if (unlocked) {
+      card.addEventListener('click', () => {
+        selectedChar = i;
+        localStorage.setItem('pe_char', i);
+        buildCharGrid();
+      });
+    }
     charGrid.appendChild(card);
   });
 }
