@@ -208,6 +208,48 @@
     color: #2a2a2a; font-size: 0.6rem;
     letter-spacing: 3px; z-index: 10;
   }
+
+  /* Character cards */
+  .char-card {
+    width: 150px;
+    background: #111;
+    border: 2px solid #222;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    text-align: center;
+    padding: 0 0 12px 0;
+    overflow: hidden;
+  }
+  .char-card:hover {
+    border-color: #444;
+    background: #181818;
+  }
+  .char-card.selected {
+    border-color: #ff6600;
+    box-shadow: 0 0 20px rgba(255,102,0,0.2);
+  }
+  .char-avatar {
+    width: 100%; height: 120px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 3.5rem;
+    border-bottom: 1px solid #1a1a1a;
+  }
+  .char-card:nth-child(1) .char-avatar { background: #1a1410; }
+  .char-card:nth-child(2) .char-avatar { background: #1a1816; }
+  .char-card:nth-child(3) .char-avatar { background: #1a1410; }
+  .char-card:nth-child(4) .char-avatar { background: #1a1816; }
+  .char-card:nth-child(5) .char-avatar { background: #1a1816; }
+  .char-name {
+    color: #ccc; font-size: 0.85rem;
+    letter-spacing: 2px; margin-top: 10px;
+    font-weight: bold;
+  }
+  .char-id {
+    color: #555; font-size: 0.6rem;
+    letter-spacing: 1px; margin-top: 4px;
+  }
+  .char-card.selected .char-name { color: #ff6600; }
+  .char-card.selected .char-id { color: #884400; }
 </style>
 </head>
 <body>
@@ -246,6 +288,13 @@
   </div>
 </div>
 
+<!-- Character Select overlay -->
+<div id="char-overlay" style="display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.95); flex-direction:column; justify-content:center; align-items:center; font-family:'Courier New',monospace;">
+  <h2 style="color:#ff6600; letter-spacing:6px; font-size:1.3rem; margin-bottom:30px;">SELECT INMATE</h2>
+  <div id="char-grid" style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center; max-width:900px;"></div>
+  <button class="btn btn-secondary" id="btn-char-back" style="margin-top:30px;">BACK</button>
+</div>
+
 <div class="footer">BLACKRIDGE PENITENTIARY &mdash; MAXIMUM SECURITY</div>
 
 <script>
@@ -271,13 +320,50 @@ if (bestLevel > 0) {
   btnLevels.textContent = 'LEVEL SELECT';
 }
 
-btnStart.addEventListener('click', () => {
-  // Placeholder — will start game
-  console.log('Starting game...');
-});
+// Character data
+const characters = [
+  { name: 'Franklin', id: '#48291', skin: '#6b4c2a', icon: '\u{1F474}', trait: 'The Strategist' },
+  { name: 'Arthur',   id: '#77304', skin: '#d4a574', icon: '\u{1F9D4}', trait: 'The Brawler' },
+  { name: 'Carl',     id: '#55912', skin: '#5c3a1e', icon: '\u{1F9D1}', trait: 'The Hacker' },
+  { name: 'Tommy',    id: '#66188', skin: '#e0b894', icon: '\u{1F468}', trait: 'The Ghost' },
+  { name: 'John',     id: '#33007', skin: '#c99b7a', icon: '\u{1F935}', trait: 'The Lockpick' },
+];
+let selectedChar = parseInt(localStorage.getItem('pe_char') || '0');
+
+const charOverlay = document.getElementById('char-overlay');
+const charGrid = document.getElementById('char-grid');
+const btnCharBack = document.getElementById('btn-char-back');
+
+function buildCharGrid() {
+  charGrid.innerHTML = '';
+  characters.forEach((ch, i) => {
+    const card = document.createElement('div');
+    card.className = 'char-card' + (i === selectedChar ? ' selected' : '');
+    card.innerHTML = `
+      <div class="char-avatar">${ch.icon}</div>
+      <div class="char-name">${ch.name.toUpperCase()}</div>
+      <div class="char-id">${ch.id}</div>
+    `;
+    card.addEventListener('click', () => {
+      selectedChar = i;
+      localStorage.setItem('pe_char', i);
+      buildCharGrid();
+    });
+    charGrid.appendChild(card);
+  });
+}
 
 btnCharacters.addEventListener('click', () => {
-  console.log('Characters screen...');
+  buildCharGrid();
+  charOverlay.style.display = 'flex';
+});
+
+btnCharBack.addEventListener('click', () => {
+  charOverlay.style.display = 'none';
+});
+
+btnStart.addEventListener('click', () => {
+  console.log('Starting game...');
 });
 
 btnSettings.addEventListener('click', () => {
