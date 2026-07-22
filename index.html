@@ -668,146 +668,228 @@ function gameLoop(ts) {
     return;
   }
 
-  // ============ RENDER ============
-  // Scrolling floor
-  const floorOffset = scrollY % 40;
-  ctx.fillStyle = '#1a1a1c';
+  // ============ RENDER — GTA 1 Style ============
+  // Sky/ambient — warm streetlight glow
+  const skyGrad = ctx.createRadialGradient(W/2, H/2, 100, W/2, H/2, 500);
+  skyGrad.addColorStop(0, '#2a2418');
+  skyGrad.addColorStop(1, '#0d0b06');
+  ctx.fillStyle = skyGrad;
   ctx.fillRect(0, 0, W, H);
-  for (let y = -floorOffset; y < H; y += 40) {
-    for (let x = 0; x < W; x += 40) {
-      ctx.fillStyle = '#1e1e22';
-      ctx.fillRect(x, y, 39, 39);
-      ctx.fillStyle = '#1a1a1e';
-      ctx.fillRect(x+1, y+1, 37, 37);
+
+  // Scrolling concrete floor with cracks
+  const floorOff = scrollY % 48;
+  for (let y = -floorOff; y < H; y += 48) {
+    for (let x = 56; x < W - 56; x += 48) {
+      ctx.fillStyle = '#3a3428';
+      ctx.fillRect(x, y, 47, 47);
+      ctx.fillStyle = '#332e24';
+      ctx.fillRect(x+1, y+1, 45, 45);
+      // Random cracks
+      const seed = (Math.floor(x/48) * 7 + Math.floor((y+scrollY)/48) * 13) % 100;
+      if (seed < 25) {
+        ctx.strokeStyle = '#2a2418';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x+10+(seed%20), y+15);
+        ctx.lineTo(x+25+(seed%10), y+30);
+        ctx.stroke();
+      }
     }
   }
 
-  // Side walls
-  ctx.fillStyle = '#3a3a3a';
-  ctx.fillRect(0, 0, 50, H);
-  ctx.fillRect(W-50, 0, 50, H);
-  for (let y = 0; y < H; y += 40) {
-    ctx.fillStyle = '#444';
-    ctx.fillRect(4, y, 42, 35);
-    ctx.fillRect(W-46, y, 42, 35);
-    ctx.fillStyle = '#333';
-    ctx.fillRect(8, y+4, 34, 27);
-    ctx.fillRect(W-42, y+4, 34, 27);
+  // Brick walls (GTA 1 style)
+  for (let wy = 0; wy < H; wy += 24) {
+    for (let side = 0; side < 2; side++) {
+      const wx = side === 0 ? 4 : W - 52;
+      const offset = (wy / 24) % 2 === 0 ? 0 : 24;
+      ctx.fillStyle = '#5a3a28';
+      ctx.fillRect(wx, wy, 48, 23);
+      ctx.fillStyle = '#4a2e1e';
+      ctx.fillRect(wx + 24, wy, 24, 23);
+      // Mortar lines
+      ctx.fillStyle = '#2a1a10';
+      ctx.fillRect(wx, wy+11, 48, 1);
+      ctx.fillRect(wx+24, wy, 1, 23);
+    }
+    // Second brick row offset
+    for (let side = 0; side < 2; side++) {
+      const wx = side === 0 ? 4 : W - 52;
+      ctx.fillStyle = '#5a3a28';
+      ctx.fillRect(wx+12, wy+12, 24, 11);
+      ctx.fillStyle = '#4a2e1e';
+      ctx.fillRect(wx+36, wy+12, 12, 11);
+    }
   }
 
-  // Keys
+  // Wall edge highlights
+  ctx.fillStyle = '#6b4430';
+  ctx.fillRect(4, 0, 2, H);
+  ctx.fillRect(50, 0, 2, H);
+  ctx.fillRect(W-52, 0, 2, H);
+  ctx.fillRect(W-6, 0, 2, H);
+
+  // Keys — GTA 1 style pickup
   for (const k of keys) {
     if (k.collected) continue;
-    ctx.fillStyle = '#ffaa00';
+    const bob = Math.sin(scrollY * 0.05) * 3;
+    ctx.fillStyle = '#ffcc00';
+    ctx.shadowColor = '#ff8800';
+    ctx.shadowBlur = 8;
     ctx.beginPath();
-    ctx.arc(k.x, k.y, 8, 0, Math.PI * 2);
+    ctx.arc(k.x, k.y + bob, 6, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#ffdd44';
-    ctx.beginPath();
-    ctx.arc(k.x-2, k.y-2, 4, 0, Math.PI * 2);
-    ctx.fill();
-    // Key float animation
     ctx.fillStyle = '#fff';
-    ctx.font = '10px monospace';
-    ctx.fillText('KEY', k.x - 14, k.y - 14);
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.arc(k.x-1, k.y-1 + bob, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
   }
 
-  // Guards (obstacles)
+  // Guards — GTA 1 cop style
   for (const o of obstacles) {
     // Vision cone
     const coneY = o.y + o.h/2;
-    ctx.fillStyle = 'rgba(255,0,0,0.08)';
+    ctx.fillStyle = 'rgba(255,60,20,0.1)';
     ctx.beginPath();
     ctx.moveTo(o.x, coneY);
-    ctx.arc(o.x, coneY, 80, -0.6, 0.6);
+    ctx.arc(o.x, coneY, 90, -0.5, 0.5);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,50,50,0.3)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
 
-    // Body
-    ctx.fillStyle = '#993333';
+    // Body — blue cop uniform
+    ctx.fillStyle = '#1a3355';
     ctx.beginPath();
-    ctx.arc(o.x, o.y, 14, 0, Math.PI * 2);
+    ctx.arc(o.x, o.y + 2, 12, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#cc4444';
-    ctx.beginPath();
-    ctx.arc(o.x-3, o.y-3, 6, 0, Math.PI * 2);
-    ctx.fill();
-    // Hat
-    ctx.fillStyle = '#111';
-    ctx.fillRect(o.x-9, o.y-18, 18, 7);
     // Badge
     ctx.fillStyle = '#ffcc00';
-    ctx.fillRect(o.x-3, o.y+8, 6, 4);
+    ctx.fillRect(o.x-4, o.y+6, 8, 5);
+    // Head
+    ctx.fillStyle = '#d4a574';
+    ctx.beginPath();
+    ctx.arc(o.x, o.y-6, 8, 0, Math.PI * 2);
+    ctx.fill();
+    // Cop hat
+    ctx.fillStyle = '#1a3355';
+    ctx.fillRect(o.x-9, o.y-16, 18, 5);
+    ctx.fillRect(o.x-7, o.y-13, 14, 4);
+    // Hat badge
+    ctx.fillStyle = '#ffcc00';
+    ctx.fillRect(o.x-2, o.y-15, 4, 3);
+    // Eyes
+    ctx.fillStyle = '#000';
+    ctx.fillRect(o.x-3, o.y-8, 2, 2);
+    ctx.fillRect(o.x+1, o.y-8, 2, 2);
+    // Nightstick
+    ctx.strokeStyle = '#3a2a1a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(o.x+10, o.y+11);
+    ctx.lineTo(o.x+10, o.y+20);
+    ctx.stroke();
   }
 
-  // Player (Franklin with the yee-yee ass haircut)
+  // Player — GTA 1 style Franklin
   const px = player.x, py = player.y;
-  // Body
-  ctx.fillStyle = '#3366aa';
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
-  ctx.arc(px, py + 2, 12, 0, Math.PI * 2);
+  ctx.ellipse(px, py+8, 10, 4, 0, 0, Math.PI*2);
   ctx.fill();
-  // Head (dark skin)
+  // Pants — dark jeans
+  ctx.fillStyle = '#1a2a3a';
+  ctx.fillRect(px-6, py+2, 5, 10);
+  ctx.fillRect(px+1, py+2, 5, 10);
+  // Shoes
+  ctx.fillStyle = '#111';
+  ctx.fillRect(px-7, py+10, 6, 3);
+  ctx.fillRect(px+1, py+10, 6, 3);
+  // Torso — green hoodie (GTA V Franklin)
+  ctx.fillStyle = '#2a5530';
+  ctx.fillRect(px-8, py-4, 16, 8);
+  ctx.fillStyle = '#3a6a40';
+  ctx.fillRect(px-6, py-4, 4, 8);
+  ctx.fillRect(px+2, py-4, 4, 8);
+  // Arms
+  ctx.fillStyle = '#6b4c2a';
+  ctx.fillRect(px-10, py-3, 3, 8);
+  ctx.fillRect(px+7, py-3, 3, 8);
+  // Head — dark skin
   ctx.fillStyle = '#6b4c2a';
   ctx.beginPath();
-  ctx.arc(px, py - 4, 10, 0, Math.PI * 2);
+  ctx.arc(px, py-8, 7, 0, Math.PI*2);
   ctx.fill();
-  // Face details
-  ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(px - 3, py - 6, 2, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(px + 3, py - 6, 2, 0, Math.PI * 2); ctx.fill();
+  // Yee-yee ass haircut — high top fade
   ctx.fillStyle = '#111';
-  ctx.beginPath(); ctx.arc(px - 3, py - 6, 1, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(px + 3, py - 6, 1, 0, Math.PI * 2); ctx.fill();
-  // Yee-yee ass haircut: high top fade
-  ctx.fillStyle = '#1a1a1a';
-  ctx.fillRect(px - 9, py - 16, 18, 8);
-  ctx.fillRect(px - 7, py - 18, 14, 4);
-  ctx.fillRect(px - 5, py - 20, 10, 3);
-  // Fade sides
-  ctx.fillStyle = '#2a2a2a';
-  ctx.fillRect(px - 10, py - 13, 3, 5);
-  ctx.fillRect(px + 7, py - 13, 3, 5);
-  // Prison jumpsuit
-  ctx.fillStyle = '#ff6600';
-  ctx.fillRect(px - 10, py + 4, 20, 14);
-  ctx.fillStyle = '#ff8833';
-  ctx.fillRect(px - 8, py + 4, 4, 14);
-  ctx.fillRect(px + 4, py + 4, 4, 14);
+  ctx.fillRect(px-6, py-16, 12, 5);
+  ctx.fillRect(px-5, py-18, 10, 3);
+  ctx.fillRect(px-3, py-20, 6, 3);
+  // Fade
+  ctx.fillStyle = '#222';
+  ctx.fillRect(px-7, py-14, 2, 4);
+  ctx.fillRect(px+5, py-14, 2, 4);
+  // Eyes
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(px-3, py-9, 3, 2);
+  ctx.fillRect(px+1, py-9, 3, 2);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(px-2, py-9, 1, 1);
+  ctx.fillRect(px+2, py-9, 1, 1);
 
-  // Caught warning
+  // Caught warning — red vignette
   if (caughtTimer > 0) {
     const pct = Math.min(caughtTimer / mult.graceTime, 1);
-    ctx.fillStyle = `rgba(255,0,0,${0.15 + pct * 0.35})`;
+    const warnGrad = ctx.createRadialGradient(W/2, H/2, 50, W/2, H/2, 400);
+    warnGrad.addColorStop(0, `rgba(255,0,0,0)`);
+    warnGrad.addColorStop(1, `rgba(255,0,0,${0.2 + pct * 0.5})`);
+    ctx.fillStyle = warnGrad;
     ctx.fillRect(0, 0, W, H);
     if (pct > 0.5) {
-      ctx.fillStyle = '#ff0000';
-      ctx.font = 'bold 18px monospace';
-      ctx.fillText('! DETECTED !', W/2 - 70, H/2);
+      ctx.fillStyle = '#ff2200';
+      ctx.font = 'bold 16px "Courier New", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('! CAUGHT !', W/2, H/2 - 20);
+      ctx.textAlign = 'start';
     }
   }
 
-  // HUD
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(0, 0, W, 36);
+  // HUD — GTA 1 style bottom bar
+  ctx.fillStyle = 'rgba(0,0,0,0.85)';
+  ctx.fillRect(0, H-40, W, 40);
+  ctx.strokeStyle = '#ffaa00';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, H-40);
+  ctx.lineTo(W, H-40);
+  ctx.stroke();
+  ctx.fillStyle = '#ffaa00';
+  ctx.font = 'bold 14px "Courier New", monospace';
+  ctx.fillText('DISTANCE: ' + score + 'm', 16, H-14);
+  ctx.fillText(hasKey ? 'KEY FOUND' : 'NO KEY', 220, H-14);
+  ctx.fillText('LEVEL 1', W-110, H-14);
+  // Wanted stars
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = caughtTimer > 0 ? '#ff0000' : '#333';
+    ctx.font = '14px sans-serif';
+    ctx.fillText('\u2605', W-240 + i*24, H-14);
+  }
+  // Score multiplier
   ctx.fillStyle = '#888';
-  ctx.font = '13px monospace';
-  ctx.fillText('DISTANCE: ' + score + 'm', 12, 24);
-  ctx.fillText(hasKey ? 'KEY: YES' : 'KEY: NO', 200, 24);
-  ctx.fillText('LEVEL 1', W - 100, 24);
+  ctx.font = '10px "Courier New", monospace';
+  ctx.fillText('WANTED LEVEL', W-270, H-28);
 
   // Progress bar
   const progress = Math.min(scrollY / 3000, 1);
-  ctx.fillStyle = '#333';
-  ctx.fillRect(W/2 - 150, H - 20, 300, 10);
-  ctx.fillStyle = hasKey ? '#00aa00' : '#ff6600';
-  ctx.fillRect(W/2 - 150, H - 20, 300 * progress, 10);
-  ctx.fillStyle = '#666';
-  ctx.font = '10px monospace';
-  ctx.fillText(hasKey ? 'ESCAPE!' : 'FIND KEY', W/2 - 30, H - 8);
+  ctx.fillStyle = '#222';
+  ctx.fillRect(W/2 - 150, H - 52, 300, 6);
+  ctx.fillStyle = hasKey ? '#00cc00' : '#ff8800';
+  ctx.fillRect(W/2 - 150, H - 52, 300 * progress, 6);
+  ctx.fillStyle = '#aaa';
+  ctx.font = '9px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(hasKey ? 'HEAD FOR THE EXIT' : 'FIND THE KEY', W/2, H-58);
+  ctx.textAlign = 'start';
 
   requestAnimationFrame(gameLoop);
 }
