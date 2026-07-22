@@ -276,7 +276,7 @@
     <button class="btn btn-primary" id="btn-start">START GAME</button>
     <button class="btn btn-secondary" id="btn-characters">CHARACTERS</button>
     <button class="btn btn-secondary" id="btn-settings">SETTINGS</button>
-    <button class="btn btn-secondary locked" id="btn-levels">LEVEL SELECT — LOCKED</button>
+    <button class="btn btn-secondary locked" id="btn-levels">UNBEATABLE</button>
   </div>
 
   <div class="stats-strip">
@@ -293,6 +293,20 @@
   <h2 style="color:#ff6600; letter-spacing:6px; font-size:1.3rem; margin-bottom:30px;">SELECT INMATE</h2>
   <div id="char-grid" style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center; max-width:900px;"></div>
   <button class="btn btn-secondary" id="btn-char-back" style="margin-top:30px;">BACK</button>
+</div>
+
+<!-- Story intro overlay -->
+<div id="story-overlay" style="display:none; position:fixed; inset:0; z-index:250; background:rgba(0,0,0,0.97); flex-direction:column; justify-content:center; align-items:center; font-family:'Courier New',monospace; text-align:center;">
+  <div class="inmate-plate" style="margin-bottom:25px;">
+    <div class="mug" id="story-mug">&#128100;</div>
+    <div class="info">
+      <div class="label">INMATE</div>
+      <div class="id" id="story-id">#48291</div>
+    </div>
+  </div>
+  <div id="story-name" style="color:#ff6600; font-size:1.2rem; letter-spacing:4px; margin-bottom:20px;"></div>
+  <div id="story-text" style="color:#888; max-width:500px; line-height:1.8; font-size:0.9rem; margin-bottom:40px;"></div>
+  <button class="btn btn-primary" id="btn-story-continue">CONTINUE</button>
 </div>
 
 <div class="footer">BLACKRIDGE PENITENTIARY &mdash; MAXIMUM SECURITY</div>
@@ -314,19 +328,24 @@ document.getElementById('escapes-stat').textContent = escapes;
 document.getElementById('caught-stat').textContent = caught;
 document.getElementById('best-stat').textContent = bestLevel > 0 ? bestLevel : '\u2014';
 
-// Unlock level select if they've beaten level 1
+// Unlock unbeatable mode if they've beaten level 1
 if (bestLevel > 0) {
   btnLevels.classList.remove('locked');
-  btnLevels.textContent = 'LEVEL SELECT';
+  btnLevels.textContent = 'UNBEATABLE';
 }
 
 // Character data
 const characters = [
-  { name: 'Franklin', id: '#48291', skin: '#6b4c2a', icon: '\u{1F474}', trait: 'The Strategist' },
-  { name: 'Arthur',   id: '#77304', skin: '#d4a574', icon: '\u{1F9D4}', trait: 'The Brawler' },
-  { name: 'Carl',     id: '#55912', skin: '#5c3a1e', icon: '\u{1F9D1}', trait: 'The Hacker' },
-  { name: 'Tommy',    id: '#66188', skin: '#e0b894', icon: '\u{1F468}', trait: 'The Ghost' },
-  { name: 'John',     id: '#33007', skin: '#c99b7a', icon: '\u{1F935}', trait: 'The Lockpick' },
+  { name: 'Franklin', id: '#48291', skin: '#6b4c2a', icon: '\u{1F474}', trait: 'The Strategist',
+    story: 'Franklin got caught doing illegal street races in Los Santos. When the cops cornered him, he rammed their cruiser and made a run for it. They caught him three blocks later. Now Blackridge is his finish line.' },
+  { name: 'Arthur',   id: '#77304', skin: '#d4a574', icon: '\u{1F9D4}', trait: 'The Brawler',
+    story: 'Arthur was trying to get to Tahiti — illegally. No passport, no visa, just a forged ticket and a dream. Federal agents picked him up at the dock. They say he fought six of them before the cuffs went on.' },
+  { name: 'Carl',     id: '#55912', skin: '#5c3a1e', icon: '\u{1F9D1}', trait: 'The Hacker',
+    story: 'Carl ran with a hood gang in Grove Street. A turf war went wrong and someone didn\'t make it out. Carl took the fall. He\'s been inside for three years, but he\'s been planning his way out for two.' },
+  { name: 'Tommy',    id: '#66188', skin: '#e0b894', icon: '\u{1F468}', trait: 'The Ghost',
+    story: 'Tommy was laundering money through a chain of car dealerships. The IRS couldn\'t catch him — but a disgruntled accountant could. He walked into Blackridge in a three-piece suit. He plans to walk out in anything.' },
+  { name: 'John',     id: '#33007', skin: '#c99b7a', icon: '\u{1F935}', trait: 'The Lockpick',
+    story: 'John Marston was an outlaw. Bank robberies, train heists, you name it. The Bureau finally got him after a shootout in Blackwater. They threw him in Blackridge and threw away the key. That was their mistake.' },
 ];
 let selectedChar = parseInt(localStorage.getItem('pe_char') || '0');
 
@@ -363,7 +382,17 @@ btnCharBack.addEventListener('click', () => {
 });
 
 btnStart.addEventListener('click', () => {
-  console.log('Starting game...');
+  const ch = characters[selectedChar];
+  document.getElementById('story-mug').innerHTML = ch.icon;
+  document.getElementById('story-id').textContent = ch.id;
+  document.getElementById('story-name').textContent = ch.name.toUpperCase();
+  document.getElementById('story-text').textContent = ch.story;
+  document.getElementById('story-overlay').style.display = 'flex';
+});
+
+document.getElementById('btn-story-continue').addEventListener('click', () => {
+  document.getElementById('story-overlay').style.display = 'none';
+  console.log('Starting game as ' + characters[selectedChar].name + '...');
 });
 
 btnSettings.addEventListener('click', () => {
