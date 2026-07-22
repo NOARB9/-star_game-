@@ -397,12 +397,6 @@ document.getElementById('escapes-stat').textContent = escapes;
 document.getElementById('caught-stat').textContent = caught;
 document.getElementById('best-stat').textContent = bestLevel > 0 ? bestLevel : '\u2014';
 
-// Unlock unbeatable mode if they've beaten level 1
-if (bestLevel > 0) {
-  btnLevels.classList.remove('locked');
-  btnLevels.textContent = 'UNBEATABLE';
-}
-
 // Character data — Franklin always unlocked, others unlocked by reaching certain levels
 const characters = [
   { name: 'Franklin', id: '#48291', skin: '#6b4c2a', icon: '\u{1F474}', trait: 'The Strategist', unlockLevel: 0,
@@ -421,6 +415,12 @@ let selectedChar = parseInt(localStorage.getItem('pe_char') || '0');
 // Track unlocked characters in localStorage (comma-separated indices)
 let unlockedChars = (localStorage.getItem('pe_unlocked') || '0').split(',').map(Number);
 
+// Unlock UNBEATABLE if 3+ characters already available from previous sessions
+if (unlockedChars.length >= 3) {
+  btnLevels.classList.remove('locked');
+  btnLevels.textContent = 'UNBEATABLE';
+}
+
 function isCharUnlocked(i) {
   return unlockedChars.includes(i);
 }
@@ -429,6 +429,11 @@ function unlockChar(i) {
   if (!unlockedChars.includes(i)) {
     unlockedChars.push(i);
     localStorage.setItem('pe_unlocked', unlockedChars.join(','));
+  }
+  // Unlock UNBEATABLE when 3 characters are available
+  if (unlockedChars.length >= 3) {
+    btnLevels.classList.remove('locked');
+    btnLevels.textContent = 'UNBEATABLE';
   }
 }
 
