@@ -232,8 +232,9 @@
 
   <div class="menu-buttons">
     <button class="btn btn-primary" id="btn-start">START GAME</button>
+    <button class="btn btn-secondary" id="btn-characters">CHARACTERS</button>
+    <button class="btn btn-secondary" id="btn-settings">SETTINGS</button>
     <button class="btn btn-secondary locked" id="btn-levels">LEVEL SELECT — LOCKED</button>
-    <button class="btn btn-secondary" id="btn-how">HOW TO PLAY</button>
   </div>
 
   <div class="stats-strip">
@@ -245,27 +246,14 @@
   </div>
 </div>
 
-<!-- How to Play overlay -->
-<div id="how-overlay" style="display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.95); flex-direction:column; justify-content:center; align-items:center; color:#888; gap:20px; font-family:'Courier New',monospace;">
-  <h2 style="color:#ff6600; letter-spacing:6px; font-size:1.5rem;">HOW TO PLAY</h2>
-  <div style="max-width:450px; line-height:2; text-align:left; font-size:0.9rem; color:#777;">
-    <p><span style="color:#ff6600;">WASD</span> — Move</p>
-    <p><span style="color:#ff6600;">E</span> — Interact / Pick up</p>
-    <p><span style="color:#ff6600;">SPACE</span> — Hide in shadows</p>
-    <p><span style="color:#ff6600;">SHIFT</span> — Sprint (makes noise)</p>
-    <p style="margin-top:16px; color:#555;">Avoid guard vision cones.<br>Find keys to unlock doors.<br>Reach the green exit to escape.<br>Each level adds more guards, cameras, and locks.</p>
-  </div>
-  <button class="btn btn-secondary" onclick="document.getElementById('how-overlay').style.display='none'" style="margin-top:20px;">BACK</button>
-</div>
-
 <div class="footer">BLACKRIDGE PENITENTIARY &mdash; MAXIMUM SECURITY</div>
 
 <script>
 // --- Menu logic ---
 const btnStart = document.getElementById('btn-start');
 const btnLevels = document.getElementById('btn-levels');
-const btnHow = document.getElementById('btn-how');
-const howOverlay = document.getElementById('how-overlay');
+const btnCharacters = document.getElementById('btn-characters');
+const btnSettings = document.getElementById('btn-settings');
 const flicker = document.getElementById('flicker');
 
 // Load stats from localStorage
@@ -288,8 +276,12 @@ btnStart.addEventListener('click', () => {
   console.log('Starting game...');
 });
 
-btnHow.addEventListener('click', () => {
-  howOverlay.style.display = 'flex';
+btnCharacters.addEventListener('click', () => {
+  console.log('Characters screen...');
+});
+
+btnSettings.addEventListener('click', () => {
+  console.log('Settings screen...');
 });
 
 // Occasional light flicker
