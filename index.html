@@ -234,6 +234,13 @@
     font-size: 3.5rem;
     border-bottom: 1px solid #1a1a1a;
   }
+  .char-initial {
+    font-size: 3rem;
+    font-weight: bold;
+    color: #555;
+    font-family: 'Courier New', monospace;
+  }
+  .char-card.selected .char-initial { color: #ff6600; }
   .char-card:nth-child(1) .char-avatar { background: #1a1410; }
   .char-card:nth-child(2) .char-avatar { background: #1a1816; }
   .char-card:nth-child(3) .char-avatar { background: #1a1410; }
@@ -280,7 +287,7 @@
   </div>
 
   <div class="inmate-plate">
-    <div class="mug">&#128100;</div>
+    <div class="mug"><span style="font-size:2rem;font-weight:bold;color:#555;font-family:'Courier New',monospace;">F</span></div>
     <div class="info">
       <div class="label">INMATE</div>
       <div class="id">#48291</div>
@@ -390,7 +397,7 @@ function buildCharGrid() {
     card.className = 'char-card' + (i === selectedChar && unlocked ? ' selected' : '') + (!unlocked ? ' locked' : '');
     const lockHint = !unlocked ? `<div class="char-lock-hint">ESCAPE LEVEL ${ch.unlockLevel}</div>` : '';
     card.innerHTML = `
-      <div class="char-avatar">${unlocked ? ch.icon : '&#128274;'}</div>
+      <div class="char-avatar">${unlocked ? '<span class="char-initial">' + ch.name[0] + '</span>' : '&#128274;'}</div>
       <div class="char-name">${unlocked ? ch.name.toUpperCase() : '???'}</div>
       <div class="char-id">${unlocked ? ch.id : 'LOCKED'}</div>
       ${lockHint}
@@ -417,7 +424,7 @@ btnCharBack.addEventListener('click', () => {
 
 btnStart.addEventListener('click', () => {
   const ch = characters[selectedChar];
-  document.getElementById('story-mug').innerHTML = ch.icon;
+  document.getElementById('story-mug').innerHTML = '<span style="font-size:2rem;font-weight:bold;color:#555;font-family:Courier New,monospace;">' + ch.name[0] + '</span>';
   document.getElementById('story-id').textContent = ch.id;
   document.getElementById('story-name').textContent = ch.name.toUpperCase();
   document.getElementById('story-text').textContent = ch.story;
