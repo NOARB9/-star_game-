@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Star Voyager — Catch Stars, Dodge Asteroids!</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0a0e1a;display:flex;justify-content:center;align-items:center;height:100vh;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif;user-select:none}
+  #wrapper{position:relative;width:800px;height:600px}
+  canvas{display:block;width:100%;height:100%;border-radius:12px;box-shadow:0 0 40px rgba(0,150,255,.15);cursor:none;background:#0d1222}
+  #ui{position:absolute;top:14px;left:20px;right:20px;display:flex;justify-content:space-between;align-items:center;pointer-events:none;z-index:10}
+  #ui .left{display:flex;align-items:center;gap:16px}
+  #score{color:#ffd966;font-size:20px;font-weight:700;text-shadow:0 0 12px rgba(255,217,102,.3)}
+  #level{color:#6fa8ff;font-size:16px;font-weight:600;text-shadow:0 0 8px rgba(111,168,255,.3)}
+  #lives{font-size:18px;letter-spacing:2px}
+  #high{color:#5a6a8a;font-size:13px;font-weight:500}
+  #mode-btns{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);display:flex;gap:10px;z-index:10}
+  #mode-btns button{pointer-events:auto;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:#b0c4e0;padding:6px 16px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;transition:.2s}
+  #mode-btns button:hover{background:rgba(255,217,102,.12);border-color:rgba(255,217,102,.3);color:#ffd966}
+  #mode-btns button.active{background:rgba(255,217,102,.15);border-color:#ffd966;color:#ffd966}
+  @media(max-width:840px){#wrapper{width:100vw;height:75vw;max-height:100vh}}
+</style>
+</head>
+<body>
+
+<div id="wrapper">
+  <canvas id="c" width="800" height="600"></canvas>
+
+  <div id="ui">
+    <div class="left">
+      <span id="score">⭐ 0</span>
+      <span id="level">LEVEL 1</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span id="lives">❤️❤️❤️</span>
+      <span id="high">🏆 0</span>
+    </div>
+  </div>
+
+  <div id="mode-btns">
+    <button id="btnLvl" class="active">📋 Levels</button>
+    <button id="btnEnd">♾️ Endless</button>
+  </div>
+</div>
+
+<script>
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const W=800,H=600;
+
+// ── DOM refs ──
+const uiScore=document.getElementById('score');
+const uiLevel=document.getElementById('level');
+const uiLives=document.getElementById('lives');
+const uiHigh=document.getElementById('high');
+const btnLvl=document.getElementById('btnLvl');
+const btnEnd=document.getElementById('btnEnd');
+
+// ── Game state ──
+let mode='level';        // 'level' | 'endless'
+let level=1;
+let score=0;
+let highScore=0;
+let lives=3;
+let gameOver=false;
+let levelComplete=false;
+let state='menu';        // 'menu' | 'playing' | 'levelComplete' | 'gameOver'
+
+// ── Entities ──
+const ship={x:W/2,y:H-50,w:40,h:36};
+const stars=[];
+const asteroids=[];
+const particles=[];
+
+// ── Difficulty ──
+let baseSpeed=1.2;
+let spawnInterval=1200;  // ms
+let lastSpawn=0;
+let difficultyTimer=0;
+
+// ── Controls ──
+const keys={left:false,right:false};
+let mouseX=null;
+
+// ── High score from localStorage ──
+try{
+  const saved=localStorage.getItem('starVoyagerHigh');
+  if(saved)highScore=parseInt(saved,10)||0;
+}catch(e){}
+uiHigh.textContent='🏆 '+highScore;
+
+// ── Helpers ──
+function rand(min,max){return Math.random()*(max-min)+min}
+function randInt(min,max){return Math.floor(rand(min,max+1))}
+function clamp(v,min,max){return Math.max(min,Math.min(max,v))}
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+
+// ── Init / Reset ──
+function resetGame(){
+  level=1;score=0;lives=3;gameOver=false;levelComplete=false;
+  state='menu';stars.length=0;asteroids.length=0;particles.length=0;
+  baseSpeed=1.2;spawnInterval=1200;lastSpawn=0;difficultyTimer=0;
+  updateUI();
+}
+
+function resetLevel(){
+  stars.length=0;asteroids.length=0;particles.length=0;
+  ship.x=W/2;lastSpawn=0;
+  updateUI();
+}
+
+function startPlaying(){
+  state='playing';
+  if(mode==='level'){level=1;score=0;lives=3;}
+  else{score=0;lives=3;}
+  baseSpeed=1.2;spawnInterval=1200;difficultyTimer=0;
+  resetLevel();
+  updateUI();
+}
+
+// ── Particles ──
+function spawnParticles(x,y,color,count=10){
+  for(let i=0;i<count;i++){
+    const angle=rand(0,Math.PI*2);
+    const speed=rand(1,4);
+    particles.push({
+      x,y,color,
+      vx:Math.cos(angle)*speed,
+      vy:Math.sin(angle)*speed,
+      life:rand(15,35),
+      maxLife:35,
+      r:rand(1.5,4)
+    });
+  }
+}
+
+// ── Spawn logic ──
+function spawnStar(){
+  const r=rand(8,16);
+  const isHeart=Math.random()<0.07 && lives<5;
+  stars.push({
+    x:rand(30,W-30),y:-20,
+    r,
+    speed:rand(baseSpeed*0.7,baseSpeed*1.3),
+    value:isHeart?0:10,
+    isHeart,
+    glow:0,
+    wobble:rand(0,Math.PI*2),
+    wobbleSpeed:rand(1,3)
+  });
+}
+
+function spawnAsteroid(){
+  const size=rand(10,22);
+  asteroids.push({
+    x:rand(20,W-20),y:-20,
+    r:size,
+    speed:rand(baseSpeed*0.6,baseSpeed*1.1),
+    rotation:rand(0,Math.PI*2),
+    rotSpeed:rand(-0.04,0.04),
+    vertices:randInt(6,10),
+    jagged:Array.from({length:randInt(6,10)},()=>rand(0.6,1.2))
+  });
+}
+
+// ── Collision ──
+function circleCollision(a,b){
+  return dist(a,b)<a.r+b.r;
+}
+
+// ── Update ──
+let frame=0;
+function update(dt){
+  if(state!=='playing')return;
+  frame++;
+
+  // Difficulty ramp
+  difficultyTimer+=dt;
+  if(difficultyTimer>5){
+    difficultyTimer=0;
+    baseSpeed=Math.min(baseSpeed+0.12,4.5);
+    spawnInterval=Math.max(spawnInterval-60,350);
+  }
+
+  // Spawn
+  const now=Date.now();
+  if(now-lastSpawn>spawnInterval){
+    lastSpawn=now;
+    if(Math.random()<0.45)spawnStar();
+    if(Math.random()<0.55)spawnAsteroid();
+    // Extra spawns at higher difficulty
+    if(baseSpeed>2 && Math.random()<0.3)spawnAsteroid();
+    if(baseSpeed>3 && Math.random()<0.25)spawnAsteroid();
+  }
+
+  // Ship movement
+  let dx=0;
+  if(keys.left)dx=-1;
+  if(keys.right)dx=1;
+  if(mouseX!==null){
+    const target=mouseX-ship.w/2;
+    const diff=target-ship.x;
+    if(Math.abs(diff)>3)dx=Math.sign(diff)*Math.min(Math.abs(diff)*0.15,6);
+    else dx=0;
+  }
+  ship.x=clamp(ship.x+dx*5,6,W-6-ship.w);
+
+  // Update stars
+  for(let i=stars.length-1;i>=0;i--){
+    const s=stars[i];
+    s.y+=s.speed;
+    s.wobble+=s.wobbleSpeed*0.02;
+    s.x+=Math.sin(s.wobble)*0.3;
+    s.glow=(Math.sin(frame*0.05+s.wobble)*0.5+0.5)*0.6;
+
+    // Collision with ship
+    if(circleCollision({x:ship.x+ship.w/2,y:ship.y+ship.h/2,r:18},s)){
+      if(s.isHeart){
+        lives=Math.min(lives+1,5);
+        spawnParticles(s.x,s.y,'#ff69b4',12);
+      }else{
+        score+=s.value;
+        spawnParticles(s.x,s.y,'#ffd700',8);
+        // Level completion check
+        if(mode==='level' && score>=level*100){
+          levelComplete=true;
+          state='levelComplete';
+        }
+      }
+      updateUI();
+      stars.splice(i,1);
+      continue;
+    }
+
+    // Off screen
+    if(s.y>H+30)stars.splice(i,1);
+  }
+
+  // Update asteroids
+  for(let i=asteroids.length-1;i>=0;i--){
+    const a=asteroids[i];
+    a.y+=a.speed;
+    a.rotation+=a.rotSpeed;
+
+    // Collision with ship
+    if(circleCollision({x:ship.x+ship.w/2,y:ship.y+ship.h/2,r:14},a)){
+      lives--;
+      spawnParticles(a.x,a.y,'#ff4444',18);
+      spawnParticles(ship.x+ship.w/2,ship.y+ship.h/2,'#66ccff',8);
+      updateUI();
+      asteroids.splice(i,1);
+
+      // Screen shake effect
+      if(lives<=0){
+        gameOver=true;
+        state='gameOver';
+        if(score>highScore){
+          highScore=score;
+          try{localStorage.setItem('starVoyagerHigh',highScore.toString())}catch(e){}
+          uiHigh.textContent='🏆 '+highScore;
+        }
+      }
+      continue;
+    }
+
+    // Off screen
+    if(a.y>H+40)asteroids.splice(i,1);
+  }
+
+  // Update particles
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx;p.y+=p.vy;
+    p.vy+=0.05;
+    p.life--;
+    if(p.life<=0)particles.splice(i,1);
+  }
+}
+
+// ── Drawing ──
+function drawBackground(){
+  // Space gradient
+  const grad=ctx.createRadialGradient(400,200,50,400,300,500);
+  grad.addColorStop(0,'#0f1a33');
+  grad.addColorStop(0.5,'#0d1222');
+  grad.addColorStop(1,'#080c18');
+  ctx.fillStyle=grad;
+  ctx.fillRect(0,0,W,H);
+
+  // Starfield (static dots)
+  if(!drawBackground.seeded){
+    drawBackground.seeded=true;
+    drawBackground.bgStars=Array.from({length:120},()=>({x:rand(0,W),y:rand(0,H),r:rand(0.3,1.5),b:rand(0.3,1)}));
+  }
+  for(const s of drawBackground.bgStars){
+    const twinkle=(Math.sin(frame*0.02+s.x)*0.5+0.5)*0.5+0.5;
+    ctx.beginPath();
+    ctx.arc(s.x,s.y,s.r*twinkle,0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,255,255,${s.b*twinkle*0.6})`;
+    ctx.fill();
+  }
+}
+drawBackground.seeded=null;
+
+function drawShip(){
+  const sx=ship.x,sy=ship.y;
+  ctx.save();
+  ctx.translate(sx+ship.w/2,sy+ship.h/2);
+
+  // Engine glow
+  const pulse=Math.sin(frame*0.15)*0.3+0.7;
+  ctx.shadowColor='#4488ff';
+  ctx.shadowBlur=20*pulse;
+  ctx.beginPath();
+  ctx.moveTo(-8,16);
+  ctx.lineTo(0,28*pulse+6);
+  ctx.lineTo(8,16);
+  ctx.fillStyle=`rgba(68,136,255,${0.5*pulse})`;
+  ctx.fill();
+  ctx.shadowBlur=0;
+
+  // Ship body
+  ctx.shadowColor='#66aaff';
+  ctx.shadowBlur=15;
+  ctx.beginPath();
+  ctx.moveTo(0,-18);
+  ctx.lineTo(-14,8);
+  ctx.lineTo(-18,14);
+  ctx.lineTo(-8,12);
+  ctx.lineTo(-6,18);
+  ctx.lineTo(0,16);
+  ctx.lineTo(6,18);
+  ctx.lineTo(8,12);
+  ctx.lineTo(18,14);
+  ctx.lineTo(14,8);
+  ctx.closePath();
+  const bodyGrad=ctx.createLinearGradient(0,-12,0,16);
+  bodyGrad.addColorStop(0,'#6ac0ff');
+  bodyGrad.addColorStop(0.5,'#4488cc');
+  bodyGrad.addColorStop(1,'#2a5580');
+  ctx.fillStyle=bodyGrad;
+  ctx.fill();
+  ctx.strokeStyle='#8ad4ff';
+  ctx.lineWidth=1.2;
+  ctx.stroke();
+
+  // Cockpit
+  ctx.shadowBlur=8;
+  ctx.beginPath();
+  ctx.ellipse(0,-4,5,7,0,0,Math.PI*2);
+  ctx.fillStyle='rgba(160,220,255,0.3)';
+  ctx.fill();
+  ctx.strokeStyle='rgba(160,220,255,0.5)';
+  ctx.lineWidth=1;
+  ctx.stroke();
+
+  ctx.shadowBlur=0;
+  ctx.restore();
+}
+
+function drawStar(s){
+  const g=(Math.sin(frame*0.08+s.wobble)*0.3+0.7);
+  ctx.save();
+  ctx.translate(s.x,s.y);
+
+  // Glow
+  ctx.shadowColor='#ffd700';
+  ctx.shadowBlur=18*s.glow+6;
+
+  // Star shape
+  const r=s.r;
+  ctx.beginPath();
+  for(let i=0;i<10;i++){
+    const angle=(i*Math.PI/5)-Math.PI/2;
+    const rad=i%2===0?r:r*0.4;
+    ctx.lineTo(Math.cos(angle)*rad,Math.sin(angle)*rad);
+  }
+  ctx.closePath();
+  const grad=ctx.createRadialGradient(0,0,0,0,0,r);
+  grad.addColorStop(0,'#fff7b0');
+  grad.addColorStop(0.4,'#ffd700');
+  grad.addColorStop(1,'#cc9900');
+  ctx.fillStyle=grad;
+  ctx.fill();
+
+  ctx.shadowBlur=0;
+  ctx.restore();
+}
+
+function drawHeartStar(s){
+  ctx.save();
+  ctx.translate(s.x,s.y);
+
+  // Glow
+  ctx.shadowColor='#ff69b4';
+  ctx.shadowBlur=22;
+
+  // Heart shape
+  const sc=s.r/12;
+  ctx.scale(sc,sc);
+  ctx.beginPath();
+  ctx.moveTo(0,3);
+  ctx.bezierCurveTo(-10,-4,-14,4,0,12);
+  ctx.bezierCurveTo(14,4,10,-4,0,3);
+  ctx.fillStyle='#ff69b4';
+  ctx.fill();
+  ctx.strokeStyle='#ff9ac8';
+  ctx.lineWidth=1.5;
+  ctx.stroke();
+
+  ctx.shadowBlur=0;
+  ctx.restore();
+}
+
+function drawAsteroid(a){
+  ctx.save();
+  ctx.translate(a.x,a.y);
+  ctx.rotate(a.rotation);
+
+  ctx.shadowColor='#553322';
+  ctx.shadowBlur=10;
+
+  ctx.beginPath();
+  for(let i=0;i<a.vertices;i++){
+    const angle=(i/a.vertices)*Math.PI*2-Math.PI/2;
+    const rad=a.r*a.jagged[i%a.jagged.length];
+    const x=Math.cos(angle)*rad;
+    const y=Math.sin(angle)*rad;
+    if(i===0)ctx.moveTo(x,y);
+    else ctx.lineTo(x,y);
+  }
+  ctx.closePath();
+
+  const ag=ctx.createRadialGradient(-a.r*0.3,-a.r*0.3,0,0,0,a.r);
+  ag.addColorStop(0,'#6a5a4a');
+  ag.addColorStop(0.5,'#4a3a2a');
+  ag.addColorStop(1,'#2a1a0a');
+  ctx.fillStyle=ag;
+  ctx.fill();
+  ctx.strokeStyle='#8a7a5a';
+  ctx.lineWidth=1;
+  ctx.stroke();
+
+  // Craters
+  ctx.shadowBlur=0;
+  ctx.beginPath();
+  ctx.arc(-a.r*0.25,-a.r*0.2,a.r*0.2,0,Math.PI*2);
+  ctx.fillStyle='rgba(0,0,0,0.2)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(a.r*0.2,a.r*0.15,a.r*0.15,0,Math.PI*2);
+  ctx.fillStyle='rgba(0,0,0,0.15)';
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawParticles(){
+  for(const p of particles){
+    const alpha=p.life/p.maxLife;
+    ctx.globalAlpha=alpha;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,p.r*alpha,0,Math.PI*2);
+    ctx.fillStyle=p.color;
+    ctx.shadowColor=p.color;
+    ctx.shadowBlur=6;
+    ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  ctx.shadowBlur=0;
+}
+
+function drawUIOverlay(){
+  // Stars collected / level progress
+  if(mode==='level' && state==='playing'){
+    const progress=Math.min(score/(level*100),1);
+    ctx.fillStyle='rgba(255,255,255,0.04)';
+    ctx.fillRect(20,H-30,200,8);
+    ctx.fillStyle='rgba(255,217,102,0.4)';
+    ctx.fillRect(20,H-30,200*progress,8);
+    ctx.fillStyle='rgba(255,217,102,0.7)';
+    ctx.fillRect(20,H-30,200*progress,2);
+    ctx.fillStyle='#5a6a8a';
+    ctx.font='9px system-ui,sans-serif';
+    ctx.fillText(`PROGRESS ${score}/${level*100}`,20,H-14);
+  }
+}
+
+function drawMenu(){
+  ctx.fillStyle='rgba(0,0,0,0.5)';
+  ctx.fillRect(0,0,W,H);
+
+  // Title
+  ctx.textAlign='center';
+  ctx.shadowColor='#ffd700';
+  ctx.shadowBlur=30;
+  ctx.fillStyle='#ffd966';
+  ctx.font='bold 48px system-ui,sans-serif';
+  ctx.fillText('⭐ STAR VOYAGER',W/2,180);
+  ctx.shadowBlur=0;
+
+  ctx.fillStyle='#8899bb';
+  ctx.font='16px system-ui,sans-serif';
+  ctx.fillText('Navigate your ship through the cosmos',W/2,225);
+  ctx.fillText('Catch stars ⭐ — Dodge asteroids ☄️',W/2,250);
+
+  // Ship preview
+  ctx.save();
+  ctx.translate(W/2,340);
+  ctx.beginPath();
+  ctx.moveTo(0,-25);
+  ctx.lineTo(-20,12);
+  ctx.lineTo(-26,18);
+  ctx.lineTo(-10,16);
+  ctx.lineTo(-8,24);
+  ctx.lineTo(0,22);
+  ctx.lineTo(8,24);
+  ctx.lineTo(10,16);
+  ctx.lineTo(26,18);
+  ctx.lineTo(20,12);
+  ctx.closePath();
+  const mg=ctx.createLinearGradient(0,-16,0,22);
+  mg.addColorStop(0,'#6ac0ff');
+  mg.addColorStop(0.5,'#4488cc');
+  mg.addColorStop(1,'#2a5580');
+  ctx.fillStyle=mg;
+  ctx.shadowColor='#66aaff';
+  ctx.shadowBlur=20;
+  ctx.fill();
+  ctx.strokeStyle='#8ad4ff';
+  ctx.lineWidth=1.5;
+  ctx.stroke();
+  ctx.shadowBlur=0;
+  ctx.restore();
+
+  // Instructions
+  ctx.fillStyle='#556688';
+  ctx.font='13px system-ui,sans-serif';
+  ctx.fillText('← → or mouse to move  ·  Catch ⭐ for points  ·  Avoid ☄️ or lose ❤️',W/2,410);
+  ctx.fillText('💖 Rare pink hearts restore a life!',W/2,432);
+
+  // Mode buttons
+  const modes=[{name:'📋 LEVELS',desc:'Complete each level by collecting stars!',x:W/2-170,y:470},
+               {name:'♾️ ENDLESS',desc:'Survive as long as you can!',x:W/2+170,y:470}];
+  for(const m of modes){
+    ctx.fillStyle='rgba(255,255,255,0.06)';
+    ctx.shadowBlur=0;
+    ctx.beginPath();
+    ctx.roundRect(m.x-90,m.y-24,180,70,8);
+    ctx.fill();
+    if((mode==='level' && m.name.includes('LEVELS'))||(mode==='endless' && m.name.includes('ENDLESS'))){
+      ctx.strokeStyle='#ffd966';
+      ctx.lineWidth=2;
+      ctx.stroke();
+    }
+    ctx.fillStyle='#e8edf5';
+    ctx.font='bold 15px system-ui,sans-serif';
+    ctx.fillText(m.name,m.x,m.y+6);
+    ctx.fillStyle='#6b7d9b';
+    ctx.font='11px system-ui,sans-serif';
+    ctx.fillText(m.desc,m.x,m.y+30);
+  }
+
+  ctx.fillStyle='#ffd966';
+  ctx.font='bold 18px system-ui,sans-serif';
+  ctx.fillText('PRESS SPACE TO START',W/2,580);
+  const blink=Math.sin(Date.now()*0.004)*0.3+0.7;
+  ctx.fillStyle=`rgba(255,217,102,${blink*0.3})`;
+  ctx.fillText('PRESS SPACE TO START',W/2,580);
+}
+
+function drawLevelComplete(){
+  ctx.fillStyle='rgba(0,0,0,0.55)';
+  ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.shadowColor='#ffd700';
+  ctx.shadowBlur=30;
+  ctx.fillStyle='#ffd966';
+  ctx.font='bold 42px system-ui,sans-serif';
+  ctx.fillText('🎉 LEVEL CLEAR!',W/2,220);
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#e8edf5';
+  ctx.font='20px system-ui,sans-serif';
+  ctx.fillText(`Score: ${score}  ·  Stars: ${Math.floor(score/10)}`,W/2,280);
+  ctx.fillStyle='#6fa8ff';
+  ctx.font='18px system-ui,sans-serif';
+  ctx.fillText(`Prepare for Level ${level+1}...`,W/2,330);
+
+  ctx.fillStyle='#ffd966';
+  ctx.font='bold 16px system-ui,sans-serif';
+  const blink=Math.sin(Date.now()*0.004)*0.3+0.7;
+  ctx.fillStyle=`rgba(255,217,102,${blink*0.5+0.5})`;
+  ctx.fillText('PRESS SPACE TO CONTINUE',W/2,400);
+}
+
+function drawGameOver(){
+  ctx.fillStyle='rgba(0,0,0,0.6)';
+  ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.shadowColor='#ff4444';
+  ctx.shadowBlur=30;
+  ctx.fillStyle='#ff6666';
+  ctx.font='bold 44px system-ui,sans-serif';
+  ctx.fillText('💥 GAME OVER',W/2,210);
+  ctx.shadowBlur=0;
+
+  ctx.fillStyle='#e8edf5';
+  ctx.font='22px system-ui,sans-serif';
+  ctx.fillText(`Final Score: ${score}`,W/2,275);
+
+  if(score>=highScore && score>0){
+    ctx.fillStyle='#ffd966';
+    ctx.font='bold 18px system-ui,sans-serif';
+    ctx.fillText('🏆 NEW HIGH SCORE!',W/2,315);
+  }else{
+    ctx.fillStyle='#6b7d9b';
+    ctx.font='16px system-ui,sans-serif';
+    ctx.fillText(`High Score: ${highScore}`,W/2,315);
+  }
+
+  ctx.fillStyle='#6fa8ff';
+  ctx.font='15px system-ui,sans-serif';
+  ctx.fillText(`${mode==='level'?'Levels':'Endless'} Mode  ·  ${mode==='level'?`Reached Level ${level}`:`Survived ${Math.floor(score/10)} stars`}`,W/2,350);
+
+  ctx.fillStyle='#ffd966';
+  ctx.font='bold 16px system-ui,sans-serif';
+  const blink=Math.sin(Date.now()*0.004)*0.3+0.7;
+  ctx.fillStyle=`rgba(255,217,102,${blink*0.5+0.5})`;
+  ctx.fillText('PRESS SPACE TO TRY AGAIN',W/2,430);
+}
+
+// ── RoundRect polyfill ──
+if(!CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){this.moveTo(x+r,y);this.lineTo(x+w-r,y);this.quadraticCurveTo(x+w,y,x+w,y+r);this.lineTo(x+w,y+h-r);this.quadraticCurveTo(x+w,y+h,x+w-r,y+h);this.lineTo(x+r,y+h);this.quadraticCurveTo(x,y+h,x,y+h-r);this.lineTo(x,y+r);this.quadraticCurveTo(x,y,x+r,y);return this;}
+}
+
+// ── Main loop ──
+let lastTime=0;
+function loop(time){
+  const dt=Math.min((time-lastTime)/16.667,3);
+  lastTime=time;
+
+  ctx.clearRect(0,0,W,H);
+  drawBackground();
+
+  if(state==='playing'){
+    update(dt);
+    // Draw entities
+    for(const s of stars){
+      if(s.isHeart)drawHeartStar(s);
+      else drawStar(s);
+    }
+    for(const a of asteroids)drawAsteroid(a);
+    drawShip();
+    drawParticles();
+    drawUIOverlay();
+  }else if(state==='menu'){
+    // Draw decorative entities in menu too
+    update(dt);
+    for(const s of stars){
+      if(s.isHeart)drawHeartStar(s);
+      else drawStar(s);
+    }
+    for(const a of asteroids)drawAsteroid(a);
+    drawShip();
+    drawParticles();
+    drawMenu();
+  }else if(state==='gameOver'){
+    drawGameOver();
+  }else if(state==='levelComplete'){
+    drawLevelComplete();
+  }
+
+  requestAnimationFrame(loop);
+}
+
+// ── Events ──
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a'){keys.left=true;e.preventDefault()}
+  if(e.key==='ArrowRight'||e.key==='d'){keys.right=true;e.preventDefault()}
+  if(e.key===' '){
+    e.preventDefault();
+    if(state==='menu'){startPlaying();return}
+    if(state==='gameOver'){resetGame();return}
+    if(state==='levelComplete'){
+      level++;
+      state='playing';
+      levelComplete=false;
+      resetLevel();
+      updateUI();
+      return;
+    }
+  }
+});
+
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a'){keys.left=false;e.preventDefault()}
+  if(e.key==='ArrowRight'||e.key==='d'){keys.right=false;e.preventDefault()}
+});
+
+canvas.addEventListener('mousemove',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const scaleX=W/rect.width;
+  mouseX=(e.clientX-rect.left)*scaleX;
+});
+
+canvas.addEventListener('mouseleave',()=>{mouseX=null});
+
+canvas.addEventListener('click',e=>{
+  if(state==='menu'){startPlaying();return}
+  if(state==='gameOver'){resetGame();return}
+  if(state==='levelComplete'){
+    level++;
+    state='playing';
+    levelComplete=false;
+    resetLevel();
+    updateUI();
+  }
+});
+
+// Touch controls
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  const touch=e.touches[0];
+  const rect=canvas.getBoundingClientRect();
+  const scaleX=W/rect.width;
+  mouseX=(touch.clientX-rect.left)*scaleX;
+  if(state==='menu'){startPlaying();return}
+  if(state==='gameOver'){resetGame();return}
+  if(state==='levelComplete'){
+    level++;
+    state='playing';
+    levelComplete=false;
+    resetLevel();
+    updateUI();
+  }
+},{passive:false});
+
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  const touch=e.touches[0];
+  const rect=canvas.getBoundingClientRect();
+  const scaleX=W/rect.width;
+  mouseX=(touch.clientX-rect.left)*scaleX;
+},{passive:false});
+
+canvas.addEventListener('touchend',e=>{mouseX=null});
+
+// ── Mode buttons ──
+btnLvl.addEventListener('click',()=>{
+  mode='level';
+  btnLvl.classList.add('active');
+  btnEnd.classList.remove('active');
+  if(state==='menu'){resetGame();updateUI();}
+});
+btnEnd.addEventListener('click',()=>{
+  mode='endless';
+  btnEnd.classList.add('active');
+  btnLvl.classList.remove('active');
+  if(state==='menu'){resetGame();updateUI();}
+});
+
+function updateUI(){
+  uiScore.textContent='⭐ '+score;
+  uiLevel.textContent=mode==='level'?`LEVEL ${level}`:'♾️ ENDLESS';
+  let h='';
+  for(let i=0;i<lives;i++)h+='❤️';
+  for(let i=lives;i<3;i++)h+='🖤';
+  uiLives.textContent=h||'💀';
+}
+
+// ── GO! ──
+resetGame();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
