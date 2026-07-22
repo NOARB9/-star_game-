@@ -380,6 +380,9 @@
 
 <div class="footer">BLACKRIDGE PENITENTIARY &mdash; MAXIMUM SECURITY</div>
 
+<!-- Game canvas (hidden until game starts) -->
+<canvas id="game-canvas" width="800" height="600" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:150; image-rendering:pixelated;"></canvas>
+
 <script>
 // --- Menu logic ---
 const btnStart = document.getElementById('btn-start');
@@ -485,7 +488,7 @@ btnStart.addEventListener('click', () => {
 
 document.getElementById('btn-story-continue').addEventListener('click', () => {
   document.getElementById('story-overlay').style.display = 'none';
-  console.log('Starting game as ' + characters[selectedChar].name + '...');
+  startGame();
 });
 
 // Settings — difficulty selection
@@ -522,6 +525,348 @@ setInterval(() => {
     flicker.style.animation = 'flicker 0.15s ' + (Math.random() > 0.5 ? 'infinite' : '3');
   }
 }, 4000);
+
+// =====================================================================
+//   GAME ENGINE — 2D Top-Down Prison Escape
+// =====================================================================
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+const TILE = 32;
+const COLS = 25, ROWS = 18;
+
+// Tile types
+const FLOOR = 0, WALL = 1, DOOR = 2, EXIT = 3;
+
+// Level 1 map
+const level1 = [
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,2,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,1,1,1,1,1,1,1,1,0,0,1,1,0,0,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+];
+
+let gameMap, hasKey, gameRunning, player, guards, keys, exitPos, doors;
+
+// Difficulty multipliers
+const DIFF_MULTS = {
+  easy:   { guardSpeed: 0.6, visionRange: 100, visionAngle: 0.5, graceTime: 1.2 },
+  normal: { guardSpeed: 1.0, visionRange: 130, visionAngle: 0.65, graceTime: 0.8 },
+  hard:   { guardSpeed: 1.4, visionRange: 160, visionAngle: 0.8, graceTime: 0.4 },
+};
+
+function getTile(x, y) {
+  const col = Math.floor(x / TILE);
+  const row = Math.floor(y / TILE);
+  if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return WALL;
+  return gameMap[row][col];
+}
+
+function isSolid(tile) {
+  return tile === WALL || tile === DOOR;
+}
+
+function canMoveTo(px, py, r) {
+  r = r || 6;
+  const checks = [[px-r, py-r],[px+r, py-r],[px-r, py+r],[px+r, py+r],[px, py]];
+  for (const [cx, cy] of checks) {
+    if (isSolid(getTile(cx, cy))) return false;
+  }
+  return true;
+}
+
+function initLevel(mapData) {
+  gameMap = mapData.map(r => [...r]);
+  hasKey = false;
+  gameRunning = true;
+  player = { x: 0, y: 0, speed: 140 };
+  guards = [];
+  keys = [];
+  doors = [];
+  exitPos = null;
+
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      const cx = col * TILE + TILE/2;
+      const cy = row * TILE + TILE/2;
+      if (gameMap[row][col] === DOOR) doors.push({ x: cx, y: cy, row, col });
+      if (gameMap[row][col] === EXIT) exitPos = { x: cx, y: cy, row, col };
+    }
+  }
+
+  // Player starts in cell (row 1-4, col 1-5) — center of cell block
+  player.x = 3 * TILE;
+  player.y = 2 * TILE;
+  // Override: player starts at a specific open spot
+  player.x = 2 * TILE + TILE/2;
+  player.y = 2 * TILE + TILE/2;
+
+  // Guards
+  guards.push({ x: 20*TILE+TILE/2, y: 2*TILE+TILE/2, patrol: [{x:20*TILE+TILE/2,y:2*TILE+TILE/2},{x:20*TILE+TILE/2,y:5*TILE+TILE/2}], patrolIdx:0, speed:60, dir:1, alertTimer:0 });
+  guards.push({ x: 12*TILE+TILE/2, y: 15*TILE+TILE/2, patrol: [{x:12*TILE+TILE/2,y:15*TILE+TILE/2},{x:4*TILE+TILE/2,y:15*TILE+TILE/2},{x:4*TILE+TILE/2,y:9*TILE+TILE/2},{x:12*TILE+TILE/2,y:9*TILE+TILE/2}], patrolIdx:0, speed:50, dir:1, alertTimer:0 });
+
+  // Key in the guard room (center-right room, row 10-11, col 10)
+  keys.push({ x: 10*TILE + TILE/2, y: 11*TILE + TILE/2, collected: false });
+
+  // Make doors solid initially
+  for (const d of doors) gameMap[d.row][d.col] = DOOR;
+}
+
+function startGame() {
+  document.getElementById('main-menu').style.display = 'none';
+  document.querySelector('.footer').style.display = 'none';
+  canvas.style.display = 'block';
+  initLevel(level1);
+  requestAnimationFrame(gameLoop);
+}
+
+let lastFrame = 0;
+let keysDown = {};
+let caughtTimer = 0;
+
+document.addEventListener('keydown', e => { keysDown[e.key.toLowerCase()] = true; });
+document.addEventListener('keyup', e => { keysDown[e.key.toLowerCase()] = false; });
+
+function gameLoop(ts) {
+  if (!gameRunning) return;
+  const dt = Math.min((ts - lastFrame) / 1000, 0.05);
+  lastFrame = ts;
+
+  const mult = DIFF_MULTS[difficulty];
+
+  // Player movement
+  let dx = 0, dy = 0;
+  if (keysDown['w'] || keysDown['arrowup']) dy = -1;
+  if (keysDown['s'] || keysDown['arrowdown']) dy = 1;
+  if (keysDown['a'] || keysDown['arrowleft']) dx = -1;
+  if (keysDown['d'] || keysDown['arrowright']) dx = 1;
+  if (dx && dy) { dx *= 0.707; dy *= 0.707; }
+
+  const nx = player.x + dx * player.speed * dt;
+  const ny = player.y + dy * player.speed * dt;
+  if (canMoveTo(nx, player.y)) player.x = nx;
+  if (canMoveTo(player.x, ny)) player.y = ny;
+
+  // Key pickup
+  for (const k of keys) {
+    if (k.collected) continue;
+    const d = Math.hypot(player.x - k.x, player.y - k.y);
+    if (d < 20) {
+      k.collected = true;
+      hasKey = true;
+      // Unlock all doors
+      for (const door of doors) gameMap[door.row][door.col] = FLOOR;
+    }
+  }
+
+  // Exit check
+  if (exitPos) {
+    const ed = Math.hypot(player.x - exitPos.x, player.y - exitPos.y);
+    if (ed < 20) {
+      gameRunning = false;
+      escapes++;
+      localStorage.setItem('pe_escapes', escapes);
+      document.getElementById('escapes-stat').textContent = escapes;
+      const newBest = Math.max(bestLevel, 1);
+      if (newBest > bestLevel) {
+        bestLevel = newBest;
+        localStorage.setItem('pe_best', bestLevel);
+        document.getElementById('best-stat').textContent = bestLevel;
+        // Unlock Arthur at level 3, Carl at 5, Tommy at 7, John at 10
+        if (bestLevel >= 3) unlockChar(1);
+        if (bestLevel >= 5) unlockChar(2);
+        if (bestLevel >= 7) unlockChar(3);
+        if (bestLevel >= 10) unlockChar(4);
+      }
+      canvas.style.display = 'none';
+      document.getElementById('main-menu').style.display = 'flex';
+      document.querySelector('.footer').style.display = 'block';
+      return;
+    }
+  }
+
+  // Guard patrol
+  for (const g of guards) {
+    const target = g.patrol[g.patrolIdx];
+    const gdx = target.x - g.x;
+    const gdy = target.y - g.y;
+    const gdist = Math.hypot(gdx, gdy);
+    if (gdist < 2) {
+      g.patrolIdx = (g.patrolIdx + g.dir) % g.patrol.length;
+      if (g.patrolIdx === 0 || g.patrolIdx === g.patrol.length - 1) g.dir *= -1;
+    } else {
+      const spd = g.speed * mult.guardSpeed * dt;
+      g.x += (gdx / gdist) * spd;
+      g.y += (gdy / gdist) * spd;
+    }
+
+    // Vision cone check
+    const px = player.x - g.x;
+    const py = player.y - g.y;
+    const pdist = Math.hypot(px, py);
+    if (pdist < mult.visionRange) {
+      const angle = Math.atan2(py, px);
+      const guardAngle = Math.atan2(gdy || 0.01, gdx || 0.01);
+      let diff = angle - guardAngle;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      if (Math.abs(diff) < mult.visionAngle) {
+        // Check line of sight
+        let blocked = false;
+        const steps = Math.ceil(pdist / 16);
+        for (let s = 1; s < steps; s++) {
+          const sx = g.x + (px / steps) * s;
+          const sy = g.y + (py / steps) * s;
+          if (isSolid(getTile(sx, sy))) { blocked = true; break; }
+        }
+        if (!blocked) {
+          caughtTimer += dt;
+          if (caughtTimer > mult.graceTime) {
+            gameRunning = false;
+            caught++;
+            localStorage.setItem('pe_caught', caught);
+            document.getElementById('caught-stat').textContent = caught;
+            canvas.style.display = 'none';
+            document.getElementById('main-menu').style.display = 'flex';
+            document.querySelector('.footer').style.display = 'block';
+            return;
+          }
+        } else {
+          caughtTimer = Math.max(0, caughtTimer - dt * 2);
+        }
+      } else {
+        caughtTimer = Math.max(0, caughtTimer - dt * 2);
+      }
+    } else {
+      caughtTimer = Math.max(0, caughtTimer - dt * 2);
+    }
+  }
+
+  // Render
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(0, 0, 800, 600);
+
+  // Draw tiles
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      const x = col * TILE, y = row * TILE;
+      const t = gameMap[row][col];
+      if (t === WALL) {
+        ctx.fillStyle = '#3a3a3a';
+        ctx.fillRect(x, y, TILE, TILE);
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(x+2, y+2, TILE-4, TILE-4);
+      } else if (t === DOOR) {
+        ctx.fillStyle = '#553300';
+        ctx.fillRect(x, y, TILE, TILE);
+        ctx.fillStyle = '#442200';
+        ctx.fillRect(x+4, y+2, TILE-8, TILE-4);
+      } else if (t === EXIT) {
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(x, y, TILE, TILE);
+        ctx.fillStyle = '#003300';
+        ctx.fillRect(x+4, y+4, TILE-8, TILE-8);
+        ctx.fillStyle = '#00ff00';
+        ctx.font = '12px monospace';
+        ctx.fillText('EXIT', x+4, y+20);
+      } else {
+        ctx.fillStyle = '#222';
+        ctx.fillRect(x, y, TILE, TILE);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x+1, y+1, TILE-2, TILE-2);
+      }
+    }
+  }
+
+  // Draw keys
+  for (const k of keys) {
+    if (k.collected) continue;
+    ctx.fillStyle = '#ffaa00';
+    ctx.beginPath();
+    ctx.arc(k.x, k.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffdd44';
+    ctx.beginPath();
+    ctx.arc(k.x-1, k.y-1, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Guard vision cones
+  for (const g of guards) {
+    const target = g.patrol[g.patrolIdx];
+    const ga = Math.atan2(target.y - g.y, target.x - g.x);
+    ctx.fillStyle = 'rgba(255,0,0,0.06)';
+    ctx.beginPath();
+    ctx.moveTo(g.x, g.y);
+    ctx.arc(g.x, g.y, mult.visionRange, ga - mult.visionAngle, ga + mult.visionAngle);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,40,40,0.3)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Guards
+  for (const g of guards) {
+    ctx.fillStyle = '#cc3333';
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ff5555';
+    ctx.beginPath();
+    ctx.arc(g.x-2, g.y-2, 4, 0, Math.PI * 2);
+    ctx.fill();
+    // Hat
+    ctx.fillStyle = '#111';
+    ctx.fillRect(g.x-6, g.y-13, 12, 5);
+  }
+
+  // Caught warning
+  if (caughtTimer > 0) {
+    const pct = Math.min(caughtTimer / mult.graceTime, 1);
+    ctx.fillStyle = `rgba(255,0,0,${0.1 + pct * 0.3})`;
+    ctx.fillRect(0, 0, 800, 600);
+    ctx.fillStyle = '#ff0000';
+    ctx.font = '14px monospace';
+    ctx.fillText('DETECTED', 350, 300);
+  }
+
+  // Player
+  ctx.fillStyle = '#4488cc';
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#66aadd';
+  ctx.beginPath();
+  ctx.arc(player.x-2, player.y-2, 4, 0, Math.PI * 2);
+  ctx.fill();
+  // Hair
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.arc(player.x, player.y-8, 6, Math.PI, Math.PI * 2);
+  ctx.fill();
+
+  // HUD
+  ctx.fillStyle = '#888';
+  ctx.font = '12px monospace';
+  ctx.fillText('LEVEL 1', 10, 20);
+  ctx.fillText(hasKey ? 'KEY: YES' : 'KEY: NO', 10, 36);
+
+  requestAnimationFrame(gameLoop);
+}
 </script>
 
 </body>
