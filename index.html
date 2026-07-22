@@ -272,6 +272,33 @@
     letter-spacing: 2px;
     margin-top: 4px;
   }
+
+  /* Difficulty buttons */
+  .diff-btn {
+    display: block; width: 400px;
+    padding: 16px 24px;
+    background: #0d0d10;
+    color: #888;
+    border: 1px solid #222;
+    cursor: pointer; font-family: 'Courier New', monospace;
+    font-size: 0.9rem; letter-spacing: 2px;
+    text-align: left;
+    transition: all 0.25s ease;
+  }
+  .diff-btn:hover { background: #14141a; border-color: #444; }
+  .diff-btn.selected {
+    border-color: #ff6600;
+    box-shadow: 0 0 20px rgba(255,102,0,0.15);
+  }
+  .diff-btn.selected .diff-title { color: #ff6600; }
+  .diff-title {
+    display: block; font-size: 1rem;
+    color: #aaa; letter-spacing: 4px; font-weight: bold;
+  }
+  .diff-desc {
+    display: block; font-size: 0.7rem;
+    color: #555; margin-top: 4px; letter-spacing: 0;
+  }
 </style>
 </head>
 <body>
@@ -329,6 +356,26 @@
   <div id="story-name" style="color:#ff6600; font-size:1.2rem; letter-spacing:4px; margin-bottom:20px;"></div>
   <div id="story-text" style="color:#888; max-width:500px; line-height:1.8; font-size:0.9rem; margin-bottom:40px;"></div>
   <button class="btn btn-primary" id="btn-story-continue">CONTINUE</button>
+</div>
+
+<!-- Settings / Difficulty overlay -->
+<div id="settings-overlay" style="display:none; position:fixed; inset:0; z-index:250; background:rgba(0,0,0,0.95); flex-direction:column; justify-content:center; align-items:center; font-family:'Courier New',monospace;">
+  <h2 style="color:#ff6600; letter-spacing:6px; font-size:1.3rem; margin-bottom:40px;">DIFFICULTY</h2>
+  <div style="display:flex; flex-direction:column; gap:14px; align-items:center;">
+    <button class="diff-btn" data-diff="easy" id="diff-easy">
+      <span class="diff-title">EASY</span>
+      <span class="diff-desc">Guards are slower. Fewer cameras. More time to think.</span>
+    </button>
+    <button class="diff-btn selected" data-diff="normal" id="diff-normal">
+      <span class="diff-title">NORMAL</span>
+      <span class="diff-desc">Standard prison security. Fair challenge.</span>
+    </button>
+    <button class="diff-btn" data-diff="hard" id="diff-hard">
+      <span class="diff-title">HARD</span>
+      <span class="diff-desc">Maximum security. Guards everywhere. No room for error.</span>
+    </button>
+  </div>
+  <button class="btn btn-secondary" id="btn-settings-back" style="margin-top:30px;">BACK</button>
 </div>
 
 <div class="footer">BLACKRIDGE PENITENTIARY &mdash; MAXIMUM SECURITY</div>
@@ -436,8 +483,30 @@ document.getElementById('btn-story-continue').addEventListener('click', () => {
   console.log('Starting game as ' + characters[selectedChar].name + '...');
 });
 
+// Settings — difficulty selection
+let difficulty = localStorage.getItem('pe_diff') || 'normal';
+const settingsOverlay = document.getElementById('settings-overlay');
+const diffBtns = document.querySelectorAll('.diff-btn');
+
+function updateDiffSelection() {
+  diffBtns.forEach(b => b.classList.toggle('selected', b.dataset.diff === difficulty));
+}
+
+diffBtns.forEach(b => {
+  b.addEventListener('click', () => {
+    difficulty = b.dataset.diff;
+    localStorage.setItem('pe_diff', difficulty);
+    updateDiffSelection();
+  });
+});
+
 btnSettings.addEventListener('click', () => {
-  console.log('Settings screen...');
+  updateDiffSelection();
+  settingsOverlay.style.display = 'flex';
+});
+
+document.getElementById('btn-settings-back').addEventListener('click', () => {
+  settingsOverlay.style.display = 'none';
 });
 
 // Occasional light flicker
