@@ -527,115 +527,45 @@ setInterval(() => {
 }, 4000);
 
 // =====================================================================
-//   GAME ENGINE — 2D Top-Down Prison Escape
+//   GAME ENGINE — Top-Down Auto-Runner (Dino-game style)
 // =====================================================================
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
-const TILE = 32;
-const COLS = 25, ROWS = 18;
+const W = 800, H = 600;
 
-// Tile types
-const FLOOR = 0, WALL = 1, DOOR = 2, EXIT = 3;
+// Game state
+let gameRunning, player, obstacles, keys, score, scrollY, hasKey, caughtTimer;
+let gameSpeed, obstacleTimer, levelComplete;
 
-// Level 1 map
-const level1 = [
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-  [1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,2,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,1,1,1,1,1,1,1,1,0,0,1,1,0,0,1,1,1,1,1,1,1,1,1,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,1],
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-];
-
-let gameMap, hasKey, gameRunning, player, guards, keys, exitPos, doors;
-
-// Difficulty multipliers
 const DIFF_MULTS = {
-  easy:   { guardSpeed: 0.6, visionRange: 100, visionAngle: 0.5, graceTime: 1.2 },
-  normal: { guardSpeed: 1.0, visionRange: 130, visionAngle: 0.65, graceTime: 0.8 },
-  hard:   { guardSpeed: 1.4, visionRange: 160, visionAngle: 0.8, graceTime: 0.4 },
+  easy:   { speed: 100, guardFreq: 2.0, graceTime: 1.4 },
+  normal: { speed: 150, guardFreq: 1.3, graceTime: 0.9 },
+  hard:   { speed: 200, guardFreq: 0.8, graceTime: 0.5 },
 };
-
-function getTile(x, y) {
-  const col = Math.floor(x / TILE);
-  const row = Math.floor(y / TILE);
-  if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return WALL;
-  return gameMap[row][col];
-}
-
-function isSolid(tile) {
-  return tile === WALL || tile === DOOR;
-}
-
-function canMoveTo(px, py, r) {
-  r = r || 6;
-  const checks = [[px-r, py-r],[px+r, py-r],[px-r, py+r],[px+r, py+r],[px, py]];
-  for (const [cx, cy] of checks) {
-    if (isSolid(getTile(cx, cy))) return false;
-  }
-  return true;
-}
-
-function initLevel(mapData) {
-  gameMap = mapData.map(r => [...r]);
-  hasKey = false;
-  gameRunning = true;
-  player = { x: 0, y: 0, speed: 140 };
-  guards = [];
-  keys = [];
-  doors = [];
-  exitPos = null;
-
-  for (let row = 0; row < ROWS; row++) {
-    for (let col = 0; col < COLS; col++) {
-      const cx = col * TILE + TILE/2;
-      const cy = row * TILE + TILE/2;
-      if (gameMap[row][col] === DOOR) doors.push({ x: cx, y: cy, row, col });
-      if (gameMap[row][col] === EXIT) exitPos = { x: cx, y: cy, row, col };
-    }
-  }
-
-  // Player starts in cell (row 1-4, col 1-5) — center of cell block
-  player.x = 3 * TILE;
-  player.y = 2 * TILE;
-  // Override: player starts at a specific open spot
-  player.x = 2 * TILE + TILE/2;
-  player.y = 2 * TILE + TILE/2;
-
-  // Guards
-  guards.push({ x: 20*TILE+TILE/2, y: 2*TILE+TILE/2, patrol: [{x:20*TILE+TILE/2,y:2*TILE+TILE/2},{x:20*TILE+TILE/2,y:5*TILE+TILE/2}], patrolIdx:0, speed:60, dir:1, alertTimer:0 });
-  guards.push({ x: 12*TILE+TILE/2, y: 15*TILE+TILE/2, patrol: [{x:12*TILE+TILE/2,y:15*TILE+TILE/2},{x:4*TILE+TILE/2,y:15*TILE+TILE/2},{x:4*TILE+TILE/2,y:9*TILE+TILE/2},{x:12*TILE+TILE/2,y:9*TILE+TILE/2}], patrolIdx:0, speed:50, dir:1, alertTimer:0 });
-
-  // Key in the guard room (center-right room, row 10-11, col 10)
-  keys.push({ x: 10*TILE + TILE/2, y: 11*TILE + TILE/2, collected: false });
-
-  // Make doors solid initially
-  for (const d of doors) gameMap[d.row][d.col] = DOOR;
-}
 
 function startGame() {
   document.getElementById('main-menu').style.display = 'none';
   document.querySelector('.footer').style.display = 'none';
   canvas.style.display = 'block';
-  initLevel(level1);
+
+  const mult = DIFF_MULTS[difficulty];
+  gameRunning = true;
+  gameSpeed = mult.speed;
+  player = { x: W/2, y: H - 100, w: 20, h: 20, speed: 200 };
+  obstacles = [];
+  keys = [];
+  score = 0;
+  scrollY = 0;
+  hasKey = false;
+  caughtTimer = 0;
+  obstacleTimer = 0;
+  levelComplete = false;
+
   requestAnimationFrame(gameLoop);
 }
 
 let lastFrame = 0;
 let keysDown = {};
-let caughtTimer = 0;
 
 document.addEventListener('keydown', e => { keysDown[e.key.toLowerCase()] = true; });
 document.addEventListener('keyup', e => { keysDown[e.key.toLowerCase()] = false; });
@@ -647,225 +577,245 @@ function gameLoop(ts) {
 
   const mult = DIFF_MULTS[difficulty];
 
-  // Player movement
-  let dx = 0, dy = 0;
-  if (keysDown['w'] || keysDown['arrowup']) dy = -1;
-  if (keysDown['s'] || keysDown['arrowdown']) dy = 1;
+  // Player movement (left/right only, auto-runs forward)
+  let dx = 0;
   if (keysDown['a'] || keysDown['arrowleft']) dx = -1;
   if (keysDown['d'] || keysDown['arrowright']) dx = 1;
-  if (dx && dy) { dx *= 0.707; dy *= 0.707; }
+  player.x += dx * player.speed * dt;
+  player.x = Math.max(60, Math.min(W - 60, player.x));
 
-  const nx = player.x + dx * player.speed * dt;
-  const ny = player.y + dy * player.speed * dt;
-  if (canMoveTo(nx, player.y)) player.x = nx;
-  if (canMoveTo(player.x, ny)) player.y = ny;
+  // Scroll
+  scrollY += gameSpeed * dt;
+  score = Math.floor(scrollY / 10);
+
+  // Spawn obstacles (guards)
+  obstacleTimer -= dt;
+  if (obstacleTimer <= 0) {
+    obstacleTimer = mult.guardFreq + Math.random() * 0.8;
+    const gx = 60 + Math.random() * (W - 120);
+    obstacles.push({ x: gx, y: -40, w: 24, h: 24, active: true });
+  }
+
+  // Spawn keys occasionally
+  if (Math.random() < 0.003 && keys.length === 0) {
+    keys.push({ x: 60 + Math.random() * (W - 120), y: -40, collected: false });
+  }
+
+  // Move obstacles down (they scroll toward player)
+  for (const o of obstacles) {
+    o.y += gameSpeed * dt;
+    if (o.y > H + 50) o.active = false;
+  }
+  obstacles = obstacles.filter(o => o.active);
+
+  // Move keys
+  for (const k of keys) {
+    if (k.collected) continue;
+    k.y += gameSpeed * dt;
+    if (k.y > H + 50) k.collected = true; // miss
+  }
+
+  // Collision: player vs guards
+  for (const o of obstacles) {
+    const px = player.x, py = player.y;
+    const pw = player.w, ph = player.h;
+    if (px - pw/2 < o.x + o.w/2 && px + pw/2 > o.x - o.w/2 &&
+        py - ph/2 < o.y + o.h/2 && py + ph/2 > o.y - o.h/2) {
+      caughtTimer += dt;
+      if (caughtTimer > mult.graceTime) {
+        gameRunning = false;
+        caught++;
+        localStorage.setItem('pe_caught', caught);
+        document.getElementById('caught-stat').textContent = caught;
+        endGame('caught');
+        return;
+      }
+    } else {
+      // Check distance for nearby guards
+      const d = Math.hypot(px - o.x, py - o.y);
+      if (d > 60) caughtTimer = Math.max(0, caughtTimer - dt * 2);
+    }
+  }
 
   // Key pickup
   for (const k of keys) {
     if (k.collected) continue;
     const d = Math.hypot(player.x - k.x, player.y - k.y);
-    if (d < 20) {
+    if (d < 30) {
       k.collected = true;
       hasKey = true;
-      // Unlock all doors
-      for (const door of doors) gameMap[door.row][door.col] = FLOOR;
     }
   }
 
-  // Exit check
-  if (exitPos) {
-    const ed = Math.hypot(player.x - exitPos.x, player.y - exitPos.y);
-    if (ed < 20) {
-      gameRunning = false;
-      escapes++;
-      localStorage.setItem('pe_escapes', escapes);
-      document.getElementById('escapes-stat').textContent = escapes;
-      const newBest = Math.max(bestLevel, 1);
-      if (newBest > bestLevel) {
-        bestLevel = newBest;
-        localStorage.setItem('pe_best', bestLevel);
-        document.getElementById('best-stat').textContent = bestLevel;
-        // Unlock Arthur at level 3, Carl at 5, Tommy at 7, John at 10
-        if (bestLevel >= 3) unlockChar(1);
-        if (bestLevel >= 5) unlockChar(2);
-        if (bestLevel >= 7) unlockChar(3);
-        if (bestLevel >= 10) unlockChar(4);
-      }
-      canvas.style.display = 'none';
-      document.getElementById('main-menu').style.display = 'flex';
-      document.querySelector('.footer').style.display = 'block';
-      return;
+  // Level complete: escape after enough distance with key
+  if (scrollY > 3000 && hasKey && !levelComplete) {
+    levelComplete = true;
+    gameRunning = false;
+    escapes++;
+    localStorage.setItem('pe_escapes', escapes);
+    document.getElementById('escapes-stat').textContent = escapes;
+    const newBest = Math.max(bestLevel, 1);
+    if (newBest > bestLevel) {
+      bestLevel = newBest;
+      localStorage.setItem('pe_best', bestLevel);
+      document.getElementById('best-stat').textContent = bestLevel;
+      if (bestLevel >= 3) unlockChar(1);
+      if (bestLevel >= 5) unlockChar(2);
+      if (bestLevel >= 7) unlockChar(3);
+      if (bestLevel >= 10) unlockChar(4);
+    }
+    endGame('escaped');
+    return;
+  }
+
+  // ============ RENDER ============
+  // Scrolling floor
+  const floorOffset = scrollY % 40;
+  ctx.fillStyle = '#1a1a1c';
+  ctx.fillRect(0, 0, W, H);
+  for (let y = -floorOffset; y < H; y += 40) {
+    for (let x = 0; x < W; x += 40) {
+      ctx.fillStyle = '#1e1e22';
+      ctx.fillRect(x, y, 39, 39);
+      ctx.fillStyle = '#1a1a1e';
+      ctx.fillRect(x+1, y+1, 37, 37);
     }
   }
 
-  // Guard patrol
-  for (const g of guards) {
-    const target = g.patrol[g.patrolIdx];
-    const gdx = target.x - g.x;
-    const gdy = target.y - g.y;
-    const gdist = Math.hypot(gdx, gdy);
-    if (gdist < 2) {
-      g.patrolIdx = (g.patrolIdx + g.dir) % g.patrol.length;
-      if (g.patrolIdx === 0 || g.patrolIdx === g.patrol.length - 1) g.dir *= -1;
-    } else {
-      const spd = g.speed * mult.guardSpeed * dt;
-      g.x += (gdx / gdist) * spd;
-      g.y += (gdy / gdist) * spd;
-    }
-
-    // Vision cone check
-    const px = player.x - g.x;
-    const py = player.y - g.y;
-    const pdist = Math.hypot(px, py);
-    if (pdist < mult.visionRange) {
-      const angle = Math.atan2(py, px);
-      const guardAngle = Math.atan2(gdy || 0.01, gdx || 0.01);
-      let diff = angle - guardAngle;
-      while (diff > Math.PI) diff -= Math.PI * 2;
-      while (diff < -Math.PI) diff += Math.PI * 2;
-      if (Math.abs(diff) < mult.visionAngle) {
-        // Check line of sight
-        let blocked = false;
-        const steps = Math.ceil(pdist / 16);
-        for (let s = 1; s < steps; s++) {
-          const sx = g.x + (px / steps) * s;
-          const sy = g.y + (py / steps) * s;
-          if (isSolid(getTile(sx, sy))) { blocked = true; break; }
-        }
-        if (!blocked) {
-          caughtTimer += dt;
-          if (caughtTimer > mult.graceTime) {
-            gameRunning = false;
-            caught++;
-            localStorage.setItem('pe_caught', caught);
-            document.getElementById('caught-stat').textContent = caught;
-            canvas.style.display = 'none';
-            document.getElementById('main-menu').style.display = 'flex';
-            document.querySelector('.footer').style.display = 'block';
-            return;
-          }
-        } else {
-          caughtTimer = Math.max(0, caughtTimer - dt * 2);
-        }
-      } else {
-        caughtTimer = Math.max(0, caughtTimer - dt * 2);
-      }
-    } else {
-      caughtTimer = Math.max(0, caughtTimer - dt * 2);
-    }
+  // Side walls
+  ctx.fillStyle = '#3a3a3a';
+  ctx.fillRect(0, 0, 50, H);
+  ctx.fillRect(W-50, 0, 50, H);
+  for (let y = 0; y < H; y += 40) {
+    ctx.fillStyle = '#444';
+    ctx.fillRect(4, y, 42, 35);
+    ctx.fillRect(W-46, y, 42, 35);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(8, y+4, 34, 27);
+    ctx.fillRect(W-42, y+4, 34, 27);
   }
 
-  // Render
-  ctx.fillStyle = '#1a1a1a';
-  ctx.fillRect(0, 0, 800, 600);
-
-  // Draw tiles
-  for (let row = 0; row < ROWS; row++) {
-    for (let col = 0; col < COLS; col++) {
-      const x = col * TILE, y = row * TILE;
-      const t = gameMap[row][col];
-      if (t === WALL) {
-        ctx.fillStyle = '#3a3a3a';
-        ctx.fillRect(x, y, TILE, TILE);
-        ctx.fillStyle = '#2a2a2a';
-        ctx.fillRect(x+2, y+2, TILE-4, TILE-4);
-      } else if (t === DOOR) {
-        ctx.fillStyle = '#553300';
-        ctx.fillRect(x, y, TILE, TILE);
-        ctx.fillStyle = '#442200';
-        ctx.fillRect(x+4, y+2, TILE-8, TILE-4);
-      } else if (t === EXIT) {
-        ctx.fillStyle = '#0a0a0a';
-        ctx.fillRect(x, y, TILE, TILE);
-        ctx.fillStyle = '#003300';
-        ctx.fillRect(x+4, y+4, TILE-8, TILE-8);
-        ctx.fillStyle = '#00ff00';
-        ctx.font = '12px monospace';
-        ctx.fillText('EXIT', x+4, y+20);
-      } else {
-        ctx.fillStyle = '#222';
-        ctx.fillRect(x, y, TILE, TILE);
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x+1, y+1, TILE-2, TILE-2);
-      }
-    }
-  }
-
-  // Draw keys
+  // Keys
   for (const k of keys) {
     if (k.collected) continue;
     ctx.fillStyle = '#ffaa00';
     ctx.beginPath();
-    ctx.arc(k.x, k.y, 6, 0, Math.PI * 2);
+    ctx.arc(k.x, k.y, 8, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#ffdd44';
     ctx.beginPath();
-    ctx.arc(k.x-1, k.y-1, 3, 0, Math.PI * 2);
+    ctx.arc(k.x-2, k.y-2, 4, 0, Math.PI * 2);
     ctx.fill();
+    // Key float animation
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px monospace';
+    ctx.fillText('KEY', k.x - 14, k.y - 14);
   }
 
-  // Guard vision cones
-  for (const g of guards) {
-    const target = g.patrol[g.patrolIdx];
-    const ga = Math.atan2(target.y - g.y, target.x - g.x);
-    ctx.fillStyle = 'rgba(255,0,0,0.06)';
+  // Guards (obstacles)
+  for (const o of obstacles) {
+    // Vision cone
+    const coneY = o.y + o.h/2;
+    ctx.fillStyle = 'rgba(255,0,0,0.08)';
     ctx.beginPath();
-    ctx.moveTo(g.x, g.y);
-    ctx.arc(g.x, g.y, mult.visionRange, ga - mult.visionAngle, ga + mult.visionAngle);
+    ctx.moveTo(o.x, coneY);
+    ctx.arc(o.x, coneY, 80, -0.6, 0.6);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,40,40,0.3)';
+    ctx.strokeStyle = 'rgba(255,50,50,0.3)';
     ctx.lineWidth = 1;
     ctx.stroke();
-  }
 
-  // Guards
-  for (const g of guards) {
-    ctx.fillStyle = '#cc3333';
+    // Body
+    ctx.fillStyle = '#993333';
     ctx.beginPath();
-    ctx.arc(g.x, g.y, 10, 0, Math.PI * 2);
+    ctx.arc(o.x, o.y, 14, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#ff5555';
+    ctx.fillStyle = '#cc4444';
     ctx.beginPath();
-    ctx.arc(g.x-2, g.y-2, 4, 0, Math.PI * 2);
+    ctx.arc(o.x-3, o.y-3, 6, 0, Math.PI * 2);
     ctx.fill();
     // Hat
     ctx.fillStyle = '#111';
-    ctx.fillRect(g.x-6, g.y-13, 12, 5);
+    ctx.fillRect(o.x-9, o.y-18, 18, 7);
+    // Badge
+    ctx.fillStyle = '#ffcc00';
+    ctx.fillRect(o.x-3, o.y+8, 6, 4);
   }
+
+  // Player (Franklin with the yee-yee ass haircut)
+  const px = player.x, py = player.y;
+  // Body
+  ctx.fillStyle = '#3366aa';
+  ctx.beginPath();
+  ctx.arc(px, py + 2, 12, 0, Math.PI * 2);
+  ctx.fill();
+  // Head (dark skin)
+  ctx.fillStyle = '#6b4c2a';
+  ctx.beginPath();
+  ctx.arc(px, py - 4, 10, 0, Math.PI * 2);
+  ctx.fill();
+  // Face details
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(px - 3, py - 6, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(px + 3, py - 6, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#111';
+  ctx.beginPath(); ctx.arc(px - 3, py - 6, 1, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(px + 3, py - 6, 1, 0, Math.PI * 2); ctx.fill();
+  // Yee-yee ass haircut: high top fade
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(px - 9, py - 16, 18, 8);
+  ctx.fillRect(px - 7, py - 18, 14, 4);
+  ctx.fillRect(px - 5, py - 20, 10, 3);
+  // Fade sides
+  ctx.fillStyle = '#2a2a2a';
+  ctx.fillRect(px - 10, py - 13, 3, 5);
+  ctx.fillRect(px + 7, py - 13, 3, 5);
+  // Prison jumpsuit
+  ctx.fillStyle = '#ff6600';
+  ctx.fillRect(px - 10, py + 4, 20, 14);
+  ctx.fillStyle = '#ff8833';
+  ctx.fillRect(px - 8, py + 4, 4, 14);
+  ctx.fillRect(px + 4, py + 4, 4, 14);
 
   // Caught warning
   if (caughtTimer > 0) {
     const pct = Math.min(caughtTimer / mult.graceTime, 1);
-    ctx.fillStyle = `rgba(255,0,0,${0.1 + pct * 0.3})`;
-    ctx.fillRect(0, 0, 800, 600);
-    ctx.fillStyle = '#ff0000';
-    ctx.font = '14px monospace';
-    ctx.fillText('DETECTED', 350, 300);
+    ctx.fillStyle = `rgba(255,0,0,${0.15 + pct * 0.35})`;
+    ctx.fillRect(0, 0, W, H);
+    if (pct > 0.5) {
+      ctx.fillStyle = '#ff0000';
+      ctx.font = 'bold 18px monospace';
+      ctx.fillText('! DETECTED !', W/2 - 70, H/2);
+    }
   }
 
-  // Player
-  ctx.fillStyle = '#4488cc';
-  ctx.beginPath();
-  ctx.arc(player.x, player.y, 10, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#66aadd';
-  ctx.beginPath();
-  ctx.arc(player.x-2, player.y-2, 4, 0, Math.PI * 2);
-  ctx.fill();
-  // Hair
-  ctx.fillStyle = '#1a1a1a';
-  ctx.beginPath();
-  ctx.arc(player.x, player.y-8, 6, Math.PI, Math.PI * 2);
-  ctx.fill();
-
   // HUD
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(0, 0, W, 36);
   ctx.fillStyle = '#888';
-  ctx.font = '12px monospace';
-  ctx.fillText('LEVEL 1', 10, 20);
-  ctx.fillText(hasKey ? 'KEY: YES' : 'KEY: NO', 10, 36);
+  ctx.font = '13px monospace';
+  ctx.fillText('DISTANCE: ' + score + 'm', 12, 24);
+  ctx.fillText(hasKey ? 'KEY: YES' : 'KEY: NO', 200, 24);
+  ctx.fillText('LEVEL 1', W - 100, 24);
+
+  // Progress bar
+  const progress = Math.min(scrollY / 3000, 1);
+  ctx.fillStyle = '#333';
+  ctx.fillRect(W/2 - 150, H - 20, 300, 10);
+  ctx.fillStyle = hasKey ? '#00aa00' : '#ff6600';
+  ctx.fillRect(W/2 - 150, H - 20, 300 * progress, 10);
+  ctx.fillStyle = '#666';
+  ctx.font = '10px monospace';
+  ctx.fillText(hasKey ? 'ESCAPE!' : 'FIND KEY', W/2 - 30, H - 8);
 
   requestAnimationFrame(gameLoop);
+}
+
+function endGame(reason) {
+  canvas.style.display = 'none';
+  document.getElementById('main-menu').style.display = 'flex';
+  document.querySelector('.footer').style.display = 'block';
 }
 </script>
 
